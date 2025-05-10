@@ -1,7 +1,8 @@
 import asyncio
 import json
 
-from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QListWidget, QHBoxLayout, QPushButton, QListWidgetItem, QWidget, QApplication
+from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QListWidget, QHBoxLayout, QPushButton, QListWidgetItem, QWidget, \
+    QApplication, QSizePolicy
 from PyQt6.QtCore import pyqtSlot, Qt, QEvent, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPalette, QColor, QCursor
 from screens.main_screen.search_user import UserSearchWidget
@@ -77,16 +78,33 @@ class MainWindow(QMainWindow):
         self.create_group = StyledAnimatedButton(text="+", btn_style="positive", font_size=16, height=50, width=80)
         groups_layout.addWidget(self.search_group)
         groups_layout.addWidget(self.groups_list)
+        # Замените текущий код для bottom_group_container на этот:
+        # Удаляем старый код для bottom_group_container и заменяем его на:
+
+        # Основной контейнер для групп
+        groups_container = QWidget()
+        groups_main_layout = QVBoxLayout()
+        groups_main_layout.setContentsMargins(0, 0, 0, 0)
+        groups_main_layout.setSpacing(0)
+
+        # Добавляем список групп (будет растягиваться)
+        groups_main_layout.addWidget(self.groups_list)
+
+        # Контейнер для кнопки "+" с отступами
         self.bottom_group_container = QWidget()
         bottom_group_layout = QHBoxLayout()
-        bottom_group_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_group_layout.setSpacing(10)
+        bottom_group_layout.setContentsMargins(0, 10, 0, 10)  # Отступы сверху и снизу для кнопки
         bottom_group_layout.addStretch()
         bottom_group_layout.addWidget(self.create_group)
         bottom_group_layout.addStretch()
         self.bottom_group_container.setLayout(bottom_group_layout)
         self.bottom_group_container.setStyleSheet("background-color: #171717;")
-        groups_layout.addWidget(self.bottom_group_container)
+
+        # Добавляем контейнер с кнопкой внизу
+        groups_main_layout.addWidget(self.bottom_group_container)
+
+        groups_container.setLayout(groups_main_layout)
+        groups_layout.addWidget(groups_container)
 
         self.search_button = QPushButton("Поиск")
         self.search_button.clicked.connect(self.search_user)
@@ -125,6 +143,8 @@ class MainWindow(QMainWindow):
             QListWidget {
                 background-color: #2b2b2b;
                 border: none;
+                padding: 0;
+                margin: 0;
             }
             QListWidget::item:hover {
                 background-color: #4a4a4a;
@@ -138,6 +158,8 @@ class MainWindow(QMainWindow):
             QListWidget {
                 background-color: #171717;
                 border: none;
+                padding: 0;
+                margin: 0;
             }
             QListWidget::item:hover {
                 background-color: #4a4a4a;
@@ -146,9 +168,23 @@ class MainWindow(QMainWindow):
                 background-color: #333333;
             }
         """)
+        # Для groups_layout и dialogs_layout
+        groups_layout.setContentsMargins(0, 0, 0, 0)
+        groups_layout.setSpacing(0)
+        dialogs_layout.setContentsMargins(0, 0, 0, 0)
+        dialogs_layout.setSpacing(0)
 
+        # Для chats_with_profile_layout
+        chats_with_profile_layout.setContentsMargins(0, 0, 0, 0)
+        chats_with_profile_layout.setSpacing(0)
+        dialogs_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self.dialogs_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.groups_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.groups_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.dialogs_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        # В методе __init__ после создания списков добавьте:
+        self.groups_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.dialogs_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
     def set_active_list(self, list_name):
         if list_name == self.active_list:
@@ -168,6 +204,8 @@ class MainWindow(QMainWindow):
                 QListWidget {
                     background-color: #2b2b2b;
                     border: none;
+                    padding: 0;
+                    margin: 0;
                 }
                 QListWidget::item:hover {
                     background-color: #4a4a4a;
@@ -180,6 +218,8 @@ class MainWindow(QMainWindow):
                 QListWidget {
                     background-color: #171717;
                     border: none;
+                    padding: 0;
+                    margin: 0;
                 }
                 QListWidget::item:hover {
                     background-color: #2a2a2a;
@@ -202,6 +242,8 @@ class MainWindow(QMainWindow):
                 QListWidget {
                     background-color: #171717;
                     border: none;
+                    padding: 0;
+                    margin: 0;
                 }
                 QListWidget::item:hover {
                     background-color: #2a2a2a;
@@ -214,6 +256,8 @@ class MainWindow(QMainWindow):
                 QListWidget {
                     background-color: #2b2b2b;
                     border: none;
+                    padding: 0;
+                    margin: 0;
                 }
                 QListWidget::item:hover {
                     background-color: #4a4a4a;
