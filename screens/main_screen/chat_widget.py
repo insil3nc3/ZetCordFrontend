@@ -2,7 +2,8 @@ import asyncio
 from datetime import datetime, UTC
 
 from PyQt6.QtCore import pyqtSlot
-from PyQt6.QtWidgets import QWidget, QTextEdit, QLineEdit, QPushButton, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QTextEdit, QLineEdit, QPushButton, QVBoxLayout, QLabel, QHBoxLayout
+
 
 class ChatWidget(QWidget):
     def __init__(self, user_id, chat_id, receiver_id, send_via_ws):
@@ -12,16 +13,44 @@ class ChatWidget(QWidget):
         self.user_id = user_id
         self.receiver_id = receiver_id
         # Настройка интерфейса
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(10)  # Добавлен отступ сверху списков
+        main_layout.setContentsMargins(5, 10, 0, 0)  # Отступ сверху
+        top_chat_part_container = QWidget()
+        top_chat_layout = QHBoxLayout()
+        top_chat_layout.setContentsMargins(0, 10, 0, 10)
+        top_chat_layout.setSpacing(10)
+        top_chat_layout.addStretch()
+        top_chat_layout.addWidget(QLabel("чат с кем то"))
+        top_chat_layout.addStretch()
+        top_chat_part_container.setLayout(top_chat_layout)
+        top_chat_part_container.setStyleSheet("""
+            QWidget {
+                background-color: #333333;
+                border-radius: 10px;
+            }   
+        """)
+        main_layout.addWidget(top_chat_part_container)
+
+        bottom_chat_part_container = QWidget()
+        bottom_layout = QVBoxLayout()
         self.message_display = QTextEdit()
         self.message_display.setReadOnly(True)
         self.message_input = QLineEdit()
         self.send_button = QPushButton("Отправить")
-        layout.addWidget(QLabel("Чат"))
-        layout.addWidget(self.message_display)
-        layout.addWidget(self.message_input)
-        layout.addWidget(self.send_button)
-        self.setLayout(layout)
+        bottom_layout.addWidget(QLabel("Чат"))
+        bottom_layout.addWidget(self.message_display)
+        bottom_layout.addWidget(self.message_input)
+        bottom_layout.addWidget(self.send_button)
+        bottom_chat_part_container.setLayout(bottom_layout)
+        bottom_chat_part_container.setStyleSheet("""
+            QWidget {
+                background-color: #333333;
+                border-radius: 10px;
+            }   
+        """)
+        main_layout.addWidget(bottom_chat_part_container)
+        self.setLayout(main_layout)
 
         self.send_button.clicked.connect(self.send_message)
 
