@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QVBoxLayout
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QFont
 from PyQt6.QtCore import Qt
 from screens.utils.default_avatar import default_ava_path
 from screens.utils.circular_photo import create_circular_pixmap
+from screens.utils.screen_style_sheet import load_custom_font
 
 
 class DialogItem(QWidget):
@@ -12,9 +13,13 @@ class DialogItem(QWidget):
         self.last_msg_text = last_msg if last_msg else "Нет сообщений"
         self.compact_mode = False
 
+        font = load_custom_font(12)
+        if font:
+            self.setFont(font)
+
         # ========== Layout setup ==========
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(5, 5, 5, 5)
+        self.layout.setContentsMargins(8, 8, 8, 8)
         self.setStyleSheet("background: transparent;")
         # ==============================
 
@@ -22,7 +27,7 @@ class DialogItem(QWidget):
         self.avatar = QLabel()
         selected_path = avatar_path if avatar_path else default_ava_path
         pixmap = QPixmap(selected_path)
-        circular_pixmap = create_circular_pixmap(pixmap, 40)
+        circular_pixmap = create_circular_pixmap(pixmap, 55)
         self.avatar.setPixmap(circular_pixmap)
         self.avatar.setStyleSheet("background: transparent;")
         self.layout.addWidget(self.avatar)
@@ -33,17 +38,20 @@ class DialogItem(QWidget):
         # ==============================
 
         # ========== Name label ==========
+        self.label_layout.addStretch()
         self.name_label = QLabel(self.full_username)
+        self.name_label.setFont(QFont("Inter", 10, QFont.Weight.Normal))
         self.name_label.setStyleSheet("color: white; font-weight: bold; background: transparent;")
         self.label_layout.addWidget(self.name_label)
         # ==============================
 
         # ========== Last message label ==========
+
         self.last_msg_label = QLabel(self.last_msg_text)
         self.last_msg_label.setStyleSheet("color: gray; background: transparent;")
+        self.last_msg_label.setFont(QFont("Inter", 10, QFont.Weight.Normal))
         self.label_layout.addWidget(self.last_msg_label)
         # ==============================
-
         self.layout.addLayout(self.label_layout)
         self.layout.addStretch()
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -72,11 +80,8 @@ class DialogItem(QWidget):
 
     def set_selected_style(self):
         self.setStyleSheet("""
-            background: qlineargradient(
-                x1: 0, y1: 0, x2: 1, y2: 1,
-                stop: 0 #9B4DCA, stop: 1 #6D39A8
-            );
-            border-radius: 8px;
+            background: #855685;
+            border-radius:15px;
         """)
 
     def set_default_style(self):
