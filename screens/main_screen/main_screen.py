@@ -1,42 +1,269 @@
-from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QLabel, QListWidget, QHBoxLayout
-import os
-from PyQt6.QtWidgets import QWidget, QMainWindow
-from PyQt6.QtCore import QTimer, pyqtSlot, Qt
-from PyQt6.QtGui import QFont, QFontDatabase
+import asyncio
+import json
+from time import sleep
 
+from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QLabel, QListWidget, QHBoxLayout, QPushButton, QListWidgetItem, QWidget, QApplication, QDialog
+from PyQt6.QtCore import QTimer, pyqtSlot, Qt, QEvent
+from PyQt6.QtGui import QFont, QFontDatabase, QPalette, QColor
+from screens.main_screen.search_user import UserSearchWidget
+from api.private_chat import create_chat
+from api.profile_actions import get_user_info, download_avatar
+from api.common import token_manager
+from screens.main_screen.chat_widget import ChatWidget
+from screens.main_screen.dialog_item_widget import DialogItem
+from screens.main_screen.my_profile_widget import MyProfile
+from screens.main_screen.private_chat_item_widget import CustomUserWidget
+from screens.main_screen.web_socket import WebSocketClient
 from screens.utils.screen_style_sheet import screen_style, load_custom_font
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, user_start_data):
+    def __init__(self):
         super().__init__()
-        # ========== Init ==========
-        self.user_start_data = user_start_data
+        # ========== Инициализация ==========
+        self.user2_id = None
+        self.chat_widget = None
+        self.user_start_data = None
+        self.cur_chat_id = None
+
         self.showMaximized()
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout()
+        main_layout = QHBoxLayout()
         central_widget.setLayout(main_layout)
-        # ==========================
+        self.dialogs_list = QListWidget()
+        # ==============================
 
-        # ========== Stylization ==========
+        # ========== Websocket ==========
+        self.client = WebSocketClient(token=token_manager.get_access_token())
+        self.client.message_received.connect(self.handle_ws_message)
+        self.client.connected.connect(self.get_init_data)
+        self.client.connect()
+        # ===============================
+
+        # ========== Отключение системного выделения ==========
+        # Установка палитры для отключения синего выделения
+        palette = QPalette()
+        palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 0, 0, 0))  # Прозрачный цвет выделения
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))  # Белый текст
+        QApplication.instance().setPalette(palette)
+        # ==============================
+
+        # ========== Стилизация ==========
         self.setStyleSheet(screen_style)
-        # =================================
+        # ==============================
 
-        # ========== Font ==========
+        # ========== Шрифт ==========
         font = load_custom_font(12)
         if font:
             self.setFont(font)
-        # =========================
-
-        # ========== User List ==========
-        # ====== Private chat List ======
-        self.chat_layout = QHBoxLayout()
-        self.users_list = QListWidget()
-        self.chat_layout.addWidget(self.users_list, alignment=Qt.AlignmentFlag.AlignLeft)
         # ==============================
 
-        # =====  Private chat Items =====
-        
-        # ===============================
-        # ===============================
+        # ========== chats_with_profile_widget Layouts ==========
+        chats_with_profile_layout = QVBoxLayout()
+        groups_and_dialogs_layout = QHBoxLayout()
+        groups_layout = QVBoxLayout()
+        dialogs_layout = QVBoxLayout()
+        # ==============================
+
+        # ========== chats_with_profile_layout ==========
+        self.profile_widget = MyProfile()
+        self.profile_widget.setFixedWidth(300)
+        chats_with_profile_layout.addWidget(self.profile_widget)
+        chats_with_profile_layout.addLayout(groups_and_dialogs_layout)
+        chats_with_profile_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        chats_with_profile_layout_widget = QWidget()
+        chats_with_profile_layout_widget.setLayout(chats_with_profile_layout)
+        main_layout.addWidget(chats_with_profile_layout_widget, alignment=Qt.AlignmentFlag.AlignLeft)
+        # ==============================
+
+        # ========== groups_and_dialogs_layout ==========
+        groups_and_dialogs_layout.setSpacing(0)
+        groups_and_dialogs_layout.setContentsMargins(0, 0, 0, 0)
+        groups_layout.setContentsMargins(0, 0, 0, 0)
+        groups_layout.setSpacing(0)
+        dialogs_layout.setContentsMargins(0, 0, 0, 0)
+        dialogs_layout.setSpacing(0)
+        groups_and_dialogs_layout.addLayout(groups_layout)
+        groups_and_dialogs_layout.addLayout(dialogs_layout)
+        # ==============================
+
+        # ========== groups_layout ==========
+        self.search_group = QPushButton("Найти группу")
+        self.search_group.setFixedWidth(100)
+        self.create_group = QPushButton("Создать группу")
+        self.create_group.setFixedWidth(100)
+        groups_layout.addWidget(self.search_group)
+        groups_layout.addWidget(self.create_group)
+        self.groups_list = QListWidget()
+        self.groups_list.setFixedWidth(100)
+        groups_layout.addWidget(self.groups_list)
+        # ==============================
+
+        # ========== dialogs_layout ==========
+        self.search_button = QPushButton("Поиск")
+        self.search_button.clicked.connect(self.search_user)
+        self.search_button.setFixedWidth(200)
+        dialogs_layout.addWidget(self.search_button)
+        self.dialogs_list = QListWidget()
+        self.dialogs_list.setObjectName("dialogsList")
+        self.dialogs_list.setFixedWidth(200)
+        dialogs_layout.addWidget(self.dialogs_list)
+        self.dialogs_list.itemClicked.connect(self.on_dialog_item_clicked)
+        # ==============================
+
+        # ========== Обработка кликов по спискам ==========
+        self.groups_list.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.groups_list.viewport().installEventFilter(self)
+        self.dialogs_list.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.dialogs_list.viewport().installEventFilter(self)
+        self.groups_list.clicked.connect(self.on_groups_list_clicked)
+        self.dialogs_list.clicked.connect(self.on_dialogs_list_clicked)
+        # ==============================
+
+        # ========== chat_layout ==========
+        self.chat_layout = QVBoxLayout()
+        main_layout.addLayout(self.chat_layout)
+        main_layout.addStretch()
+        # ==============================
+
+    def get_init_data(self):
+        self.client.send_json({"type": "init"})
+
+    def search_user(self):
+        search_user_widget = UserSearchWidget(self)
+        search_user_widget.show()
+
+    @pyqtSlot(str)
+    def handle_ws_message(self, message: str):
+        try:
+            data = json.loads(message)
+            if data["type"] == "init":
+                del data["type"]
+                self.user_start_data = data
+                asyncio.create_task(self.fill_dialog_list())
+                asyncio.create_task(self.profile_widget.input_data(self.user_start_data))
+            elif data["type"] == "chat_message":
+                if data["chat_id"] == self.cur_chat_id:
+                    if self.chat_widget:
+                        self.chat_widget.append_message(data)
+            elif data["type"] == "chat_history":
+                if data["chat_id"] == self.cur_chat_id:
+                    if self.chat_widget:
+                        self.chat_widget.show_history(data["messages"])
+        except json.JSONDecodeError as e:
+            print("ошибка при получении вебсокет сообщения:", e)
+
+    def eventFilter(self, obj, event):
+        # ========== Обработка кликов по пустой области ==========
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if obj == self.groups_list.viewport():
+                # print("Groups list clicked (empty area)")
+                self.on_groups_list_clicked()
+            elif obj == self.dialogs_list.viewport():
+                # print("Dialogs list clicked (empty area)")
+                self.on_dialogs_list_clicked()
+        return super().eventFilter(obj, event)
+        # ==============================
+
+    @pyqtSlot()
+    def on_groups_list_clicked(self):
+        # ========== Переключение на широкий groups_list ==========
+        # print("Switching to wide groups list")
+        self.groups_list.setFixedWidth(200)
+        self.search_group.setFixedWidth(200)
+        self.create_group.setFixedWidth(200)
+        self.dialogs_list.setFixedWidth(100)
+        self.search_button.setFixedWidth(100)
+        # Обновление интерфейса всех DialogItem в dialogs_list
+        for i in range(self.dialogs_list.count()):
+            item = self.dialogs_list.item(i)
+            widget = self.dialogs_list.itemWidget(item)
+            if widget:
+                widget.set_compact_mode(True)
+        # ==============================
+
+    @pyqtSlot()
+    def on_dialogs_list_clicked(self, index=None):
+        # ========== Переключение на широкий dialogs_list ==========
+        # print("Switching to wide dialogs list")
+        self.dialogs_list.setFixedWidth(200)
+        self.search_button.setFixedWidth(200)
+        self.groups_list.setFixedWidth(100)
+        self.search_group.setFixedWidth(100)
+        self.create_group.setFixedWidth(100)
+        # Обновление интерфейса всех DialogItem в dialogs_list
+        for i in range(self.dialogs_list.count()):
+            item = self.dialogs_list.item(i)
+            widget = self.dialogs_list.itemWidget(item)
+            if widget:
+                widget.set_compact_mode(False)
+        # ==============================
+
+    def on_dialog_item_clicked(self, item):
+        # ========== Обработка клика по элементу dialogs_list ==========
+        cur_widget = self.dialogs_list.itemWidget(item)
+        if not cur_widget:
+            # print("Ошибка: Виджет не найден для элемента")
+            return
+        try:
+            chat_id = cur_widget.chat_id
+            if self.chat_widget:
+                self.chat_widget.deleteLater()
+            self.cur_chat_id = cur_widget.chat_id
+            data = {"type": "chat_history",
+                    "chat_id": self.cur_chat_id
+                    }
+            self.send_via_ws(data)
+            self.chat_widget = ChatWidget(self.user_start_data["profile_data"]["id"], chat_id, cur_widget.user_id, self.send_via_ws)
+
+            self.chat_layout.addWidget(self.chat_widget)
+        except AttributeError:
+            # print("Ошибка: Атрибут chat_id не найден в виджете")
+            return
+
+    def send_via_ws(self, message_data: dict):
+        self.client.send_json(message_data)
+
+    async def fill_dialog_list(self):
+        # ========== Заполнение dialogs_list ==========
+        dialogs = self.user_start_data['chats_data']['chats']
+        if not dialogs:
+            return
+        for dialog in dialogs:
+            last_msg = ""
+            if dialog.get("last_message") is not None:
+                last_msg = dialog["last_message"].get("content")
+            if self.user_start_data["profile_data"].get("id") == dialog.get("user1_id"):
+                self.user2_id = dialog.get("user2_id")
+            else:
+                self.user2_id = dialog.get("user1_id")
+            user2 = await get_user_info(self.user2_id)
+            avatar_path = await download_avatar(self.user2_id)
+            widget = DialogItem(
+                username=user2.get("nickname"),
+                last_msg=last_msg,
+                avatar_path=avatar_path,
+                chat_id=dialog.get("_id"),
+                user_id=self.user2_id
+            )
+            item = QListWidgetItem()
+            item.setSizeHint(widget.sizeHint())
+            self.dialogs_list.addItem(item)
+            self.dialogs_list.setItemWidget(item, widget)
+        # ==============================
+        # Сохраняем ссылку на виджеты для управления
+        self.item_widgets = [self.dialogs_list.itemWidget(self.dialogs_list.item(i)) for i in
+                             range(self.dialogs_list.count())]
+
+        # Подключаем обработчик выделения
+        self.dialogs_list.currentItemChanged.connect(self.on_item_selected)
+
+    def on_item_selected(self, current, previous):
+        for i in range(self.dialogs_list.count()):
+            item = self.dialogs_list.item(i)
+            widget = self.dialogs_list.itemWidget(item)
+            if item is current:
+                widget.set_selected_style()
+            else:
+                widget.set_default_style()
