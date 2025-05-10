@@ -20,99 +20,170 @@ from screens.utils.list_utils import configure_list_widget_no_hscroll
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        # ========== Initialize variables ==========
         self.user2_id = None
         self.chat_widget = None
         self.user_start_data = None
         self.cur_chat_id = None
         self.active_list = 'dialogs'
+        # =========================================
 
         self.showMaximized()
+
+        # ========== Main window setup ==========
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout()
         central_widget.setLayout(main_layout)
-
-        self.dialogs_list = QListWidget()
-        self.groups_list = QListWidget()
         self.setStyleSheet(screen_style)
+        # ======================================
 
+        # ========== WebSocket client ==========
         self.client = WebSocketClient(token=token_manager.get_access_token())
         self.client.message_received.connect(self.handle_ws_message)
         self.client.connected.connect(self.get_init_data)
         self.client.connect()
+        # =====================================
 
+        # ========== Application palette ==========
         palette = QPalette()
         palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 0, 0, 0))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
         QApplication.instance().setPalette(palette)
+        # ========================================
 
-
+        # ========== Font setup ==========
         font = load_custom_font(12)
         if font:
             self.setFont(font)
+        # ===============================
 
+        # ========== Profile and chats container ==========
         chats_with_profile_layout = QVBoxLayout()
-        groups_and_dialogs_layout = QHBoxLayout()
-        groups_layout = QVBoxLayout()
-        dialogs_layout = QVBoxLayout()
+        chats_with_profile_layout.setSpacing(10)  # Добавлен отступ сверху списков
+        chats_with_profile_layout.setContentsMargins(0, 10, 0, 0)  # Отступ сверху
 
         self.profile_widget = MyProfile()
         self.profile_widget.setFixedWidth(300)
         chats_with_profile_layout.addWidget(self.profile_widget)
+
+        groups_and_dialogs_layout = QHBoxLayout()
+        groups_and_dialogs_layout.setSpacing(0)
+        groups_and_dialogs_layout.setContentsMargins(0, 0, 0, 0)
         chats_with_profile_layout.addLayout(groups_and_dialogs_layout)
-        chats_with_profile_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         chats_with_profile_layout_widget = QWidget()
         chats_with_profile_layout_widget.setLayout(chats_with_profile_layout)
         main_layout.addWidget(chats_with_profile_layout_widget, alignment=Qt.AlignmentFlag.AlignLeft)
+        # ================================================
 
-        groups_and_dialogs_layout.setSpacing(0)
-        groups_and_dialogs_layout.setContentsMargins(0, 0, 0, 0)
+        # ========== Groups section ==========
+        groups_layout = QVBoxLayout()
         groups_layout.setContentsMargins(0, 0, 0, 0)
         groups_layout.setSpacing(0)
-        dialogs_layout.setContentsMargins(0, 0, 0, 0)
-        dialogs_layout.setSpacing(0)
         groups_and_dialogs_layout.addLayout(groups_layout)
-        groups_and_dialogs_layout.addLayout(dialogs_layout)
 
-        self.search_group = StyledAnimatedButton(text="Найти...", font_size=16, height=42, def_color="#333333")
+        # Кнопка "Найти..." с аналогичными настройками
+        self.search_group = StyledAnimatedButton(
+            text="Найти...",
+            font_size=14,
+            height=35,
+            def_color="#333333",
+            width=90,
+            border_radius=14
+        )
+        self.top_group_container = QWidget()
+        top_group_layout = QHBoxLayout()
+        top_group_layout.setContentsMargins(0, 10, 0, 10)
+        top_group_layout.setSpacing(10)
+        top_group_layout.addStretch()
+        top_group_layout.addWidget(self.search_group)
+        top_group_layout.addStretch()
+        self.top_group_container.setLayout(top_group_layout)
+        self.top_group_container.setStyleSheet("""
+            QWidget {
+                background-color: #1c1c1c;
+                border-top-left-radius: 10px;
+                border-right: 1px solid #444;
+            }    
+            """)
+        groups_layout.addWidget(self.top_group_container)
+
+        self.groups_list = QListWidget()
+
+
         self.create_group = StyledAnimatedButton(text="+", btn_style="positive", font_size=16, height=50, width=80)
-        groups_layout.addWidget(self.search_group)
+
+        groups_layout.addWidget(self.top_group_container)
         groups_layout.addWidget(self.groups_list)
-        # Замените текущий код для bottom_group_container на этот:
-        # Удаляем старый код для bottom_group_container и заменяем его на:
 
-        # Основной контейнер для групп
-        groups_container = QWidget()
-        groups_main_layout = QVBoxLayout()
-        groups_main_layout.setContentsMargins(0, 0, 0, 0)
-        groups_main_layout.setSpacing(0)
-
-        # Добавляем список групп (будет растягиваться)
-        groups_main_layout.addWidget(self.groups_list)
-
-        # Контейнер для кнопки "+" с отступами
+        # Bottom container with "+" button
         self.bottom_group_container = QWidget()
         bottom_group_layout = QHBoxLayout()
         bottom_group_layout.setContentsMargins(0, 10, 0, 10)  # Отступы сверху и снизу для кнопки
+        bottom_group_layout.setSpacing(10)
         bottom_group_layout.addStretch()
         bottom_group_layout.addWidget(self.create_group)
         bottom_group_layout.addStretch()
         self.bottom_group_container.setLayout(bottom_group_layout)
-        self.bottom_group_container.setStyleSheet("background-color: #171717;")
+        self.bottom_group_container.setStyleSheet("""
+            QWidget {
+                background-color: #1c1c1c;
+                border-bottom-left-radius: 10px;
+                border-right: 1px solid #444;
+            }    
+            """)
+        groups_layout.addWidget(self.bottom_group_container)
+        # ===================================
 
-        # Добавляем контейнер с кнопкой внизу
-        groups_main_layout.addWidget(self.bottom_group_container)
+        # ========== Dialogs section ==========
+        dialogs_layout = QVBoxLayout()
+        dialogs_layout.setContentsMargins(0, 0, 0, 0)
+        dialogs_layout.setSpacing(0)
+        groups_and_dialogs_layout.addLayout(dialogs_layout)
 
-        groups_container.setLayout(groups_main_layout)
-        groups_layout.addWidget(groups_container)
-
-        self.search_button = QPushButton("Поиск")
+        self.search_button = StyledAnimatedButton(
+            text="Поиск",
+            font_size=14,
+            height=35,
+            def_color="#333333",
+            width=90,
+            border_radius=14
+        )
         self.search_button.clicked.connect(self.search_user)
-        dialogs_layout.addWidget(self.search_button)
+        self.top_dialog_container = QWidget()
+        top_dialog_layout = QHBoxLayout()
+        top_dialog_layout.setContentsMargins(0, 10, 0, 10)
+        top_dialog_layout.setSpacing(10)
+        top_dialog_layout.addStretch()
+        top_dialog_layout.addWidget(self.search_button)
+        top_dialog_layout.addStretch()
+        self.top_dialog_container.setLayout(top_dialog_layout)
+        self.top_dialog_container.setStyleSheet("""
+            QWidget {
+                background-color: #1c1c1c;
+                border-top-right-radius: 10px;
+                border-left: 1px solid #444;
+            }    
+            """)
+
+
+
+        self.dialogs_list = QListWidget()
         self.dialogs_list.setObjectName("dialogsList")
+
+        dialogs_layout.addWidget(self.top_dialog_container)
         dialogs_layout.addWidget(self.dialogs_list)
         self.dialogs_list.itemClicked.connect(self.on_dialog_item_clicked)
+        # ====================================
 
+        # ========== Chat area ==========
+        self.chat_layout = QVBoxLayout()
+        main_layout.addLayout(self.chat_layout)
+        main_layout.addStretch()
+        # ==============================
+
+        # ========== List widgets configuration ==========
         configure_list_widget_no_hscroll(self.groups_list)
         configure_list_widget_no_hscroll(self.dialogs_list)
 
@@ -122,69 +193,76 @@ class MainWindow(QMainWindow):
         self.dialogs_list.viewport().installEventFilter(self)
         self.groups_list.clicked.connect(self.on_groups_list_clicked)
         self.dialogs_list.clicked.connect(self.on_dialogs_list_clicked)
+        # ===============================================
 
-        self.chat_layout = QVBoxLayout()
-        main_layout.addLayout(self.chat_layout)
-        main_layout.addStretch()
-
-        # Set initial sizes directly to prevent incorrect state
+        # ========== Size constraints ==========
         self.dialogs_list.setMinimumWidth(200)
         self.dialogs_list.setMaximumWidth(200)
-        self.search_button.setMinimumWidth(200)
-        self.search_button.setMaximumWidth(200)
+        self.search_button.setMinimumWidth(150)
+        self.search_button.setMaximumWidth(150)
         self.groups_list.setMinimumWidth(100)
         self.groups_list.setMaximumWidth(100)
-        self.search_group.setMinimumWidth(100)
-        self.search_group.setMaximumWidth(100)
+        self.search_group.setMinimumWidth(90)
+        self.search_group.setMaximumWidth(90)
         self.create_group.setMinimumWidth(80)
         self.create_group.setMaximumWidth(80)
+        # =====================================
 
+        # ========== Stylesheets ==========
         self.dialogs_list.setStyleSheet("""
             QListWidget {
-                background-color: #2b2b2b;
+                background-color: #1c1c1c;
                 border: none;
-                padding: 0;
+                border-left: 1px solid #444;
                 margin: 0;
+                padding: 0;
+                border-bottom-right-radius: 10px;
             }
             QListWidget::item:hover {
                 background-color: #4a4a4a;
+                border-radius:15px;
             }
             QListWidget::item:selected {
-                background-color: #333333;
+                background: #855685;
+                border-radius: 20px;
+            }
+            QListWidget::item {
+                background: transparent;
+            }
+            QListWidget::item:pressed {
+                background-color: none;
+            }
+            QListWidget::item:focus {
+                outline: none;
             }
         """)
 
         self.groups_list.setStyleSheet("""
             QListWidget {
-                background-color: #171717;
+                background-color: #1c1c1c;
                 border: none;
-                padding: 0;
+                border-right: 1px solid #444;
                 margin: 0;
+                padding: 0;
             }
             QListWidget::item:hover {
                 background-color: #4a4a4a;
+                border-radius:15px;
             }
             QListWidget::item:selected {
-                background-color: #333333;
+                background: #855685;
+                border-radius: 20px;
+            }
+            QListWidget::item:focus {
+                outline: none;
             }
         """)
-        # Для groups_layout и dialogs_layout
-        groups_layout.setContentsMargins(0, 0, 0, 0)
-        groups_layout.setSpacing(0)
-        dialogs_layout.setContentsMargins(0, 0, 0, 0)
-        dialogs_layout.setSpacing(0)
+        # ================================
 
-        # Для chats_with_profile_layout
-        chats_with_profile_layout.setContentsMargins(0, 0, 0, 0)
-        chats_with_profile_layout.setSpacing(0)
-        dialogs_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        self.dialogs_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.groups_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # ========== Cursors ==========
         self.groups_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.dialogs_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        # В методе __init__ после создания списков добавьте:
-        self.groups_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.dialogs_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # =============================
 
     def set_active_list(self, list_name):
         if list_name == self.active_list:
@@ -193,80 +271,152 @@ class MainWindow(QMainWindow):
 
         if list_name == 'dialogs':
             self.dialogs_list.setFixedWidth(200)
-            self.search_button.setFixedWidth(200)
+            self.search_button.setFixedWidth(150)
             self.groups_list.setFixedWidth(100)
-            self.search_group.setFixedWidth(100)
+            self.search_group.setFixedWidth(90)
             self.search_group.edit_text("Найти...")
             self.create_group.setFixedWidth(80)
             self.create_group.edit_text("+")
 
             self.dialogs_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #2b2b2b;
+                    background-color: #1c1c1c;
                     border: none;
-                    padding: 0;
+                    border-left: 1px solid #444;
                     margin: 0;
+                    padding: 0;
+                    border-bottom-right-radius: 10px;
                 }
                 QListWidget::item:hover {
                     background-color: #4a4a4a;
+                    border-radius:15px;
                 }
                 QListWidget::item:selected {
-                    background-color: #333333;
+                    background: #855685;
+                    border-radius:20px;
+                }
+                QListWidget::item {
+                    background: transparent;
+                }
+                QListWidget::item:pressed {
+                    background-color: none;
+                }
+                QListWidget::item:focus {
+                    outline: none;
                 }
             """)
             self.groups_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #171717;
+                    background-color: #1c1c1c;
                     border: none;
+                    border-right: 1px solid #444;
                     padding: 0;
                     margin: 0;
                 }
                 QListWidget::item:hover {
                     background-color: #2a2a2a;
+                    border-radius:15px;
                 }
                 QListWidget::item:selected {
-                    background-color: #333333;
+                    background: #855685;
+                    border-radius:15px;
                 }
             """)
-            self.bottom_group_container.setStyleSheet("background-color: #171717;")
+            self.top_dialog_container.setStyleSheet("""
+                QWidget {
+                    background-color: #1c1c1c;
+                    border-top-right-radius: 10px;
+                    border-left: 1px solid #444;
+                }    
+                """)
+            self.top_group_container.setStyleSheet("""
+                QWidget {
+                    background-color: #1c1c1c;
+                    border-top-left-radius: 10px;
+                    border-right: 1px solid #444;
+                }    
+                """)
+            self.bottom_group_container.setStyleSheet("""
+                QWidget {
+                    background-color: #1c1c1c;
+                    border-bottom-left-radius: 10px;
+                    border-right: 1px solid #444;
+                }    
+                """)
         else:
             self.dialogs_list.setFixedWidth(100)
-            self.search_button.setFixedWidth(100)
+            self.search_button.setFixedWidth(90)
             self.groups_list.setFixedWidth(200)
-            self.search_group.setFixedWidth(200)
+            self.search_group.setFixedWidth(150)
             self.search_group.edit_text("Найти группу")
             self.create_group.setFixedWidth(80)
             self.create_group.edit_text("+")
 
             self.dialogs_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #171717;
+                    background-color: #1c1c1c;
                     border: none;
-                    padding: 0;
+                    border-left: 1px solid #444;
                     margin: 0;
+                    padding: 0;
+                    border-bottom-right-radius: 10px;
                 }
                 QListWidget::item:hover {
-                    background-color: #2a2a2a;
+                    background-color: #4a4a4a;
+                    border-radius:15px;
                 }
                 QListWidget::item:selected {
-                    background-color: #333333;
+                    background: #855685;
+                    border-radius:20px;
+                }
+                QListWidget::item {
+                    background: transparent;
+                }
+                QListWidget::item:pressed {
+                    background-color: none;
+                }
+                QListWidget::item:focus {
+                    outline: none;
                 }
             """)
             self.groups_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #2b2b2b;
+                    background-color: #1c1c1c;
                     border: none;
                     padding: 0;
                     margin: 0;
+                    border-right: 1px solid #444;
                 }
                 QListWidget::item:hover {
                     background-color: #4a4a4a;
+                    border-radius:15px;
                 }
                 QListWidget::item:selected {
-                    background-color: #333333;
+                    background: #855685;
+                    border-radius:15px;
                 }
             """)
-            self.bottom_group_container.setStyleSheet("background-color: #2b2b2b;")
+            self.top_dialog_container.setStyleSheet("""
+                QWidget {
+                    background-color: #1c1c1c;
+                    border-top-right-radius: 10px;
+                    border-left: 1px solid #444;
+                }    
+                """)
+            self.top_group_container.setStyleSheet("""
+                QWidget {
+                    background-color: #1c1c1c;
+                    border-top-left-radius: 10px;
+                    border-right: 1px solid #444;
+                }    
+                """)
+            self.bottom_group_container.setStyleSheet("""
+                QWidget {
+                    background-color: #1c1c1c;
+                    border-bottom-left-radius: 10px;
+                    border-right: 1px solid #444;
+                }    
+                """)
 
     @pyqtSlot()
     def on_groups_list_clicked(self):
@@ -381,7 +531,7 @@ class MainWindow(QMainWindow):
                              range(self.dialogs_list.count())]
 
         # Подключаем обработчик выделения
-        self.dialogs_list.currentItemChanged.connect(self.on_item_selected)
+        # self.dialogs_list.currentItemChanged.connect(self.on_item_selected)
 
     def on_item_selected(self, current, previous):
         for i in range(self.dialogs_list.count()):
