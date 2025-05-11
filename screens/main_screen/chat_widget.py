@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, UTC
-from PyQt6.QtCore import pyqtSlot, Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QTimer
+from PyQt6.QtCore import pyqtSlot, Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QTimer, QEvent
 from PyQt6.QtWidgets import (QWidget, QTextEdit, QLineEdit, QPushButton,
                              QVBoxLayout, QLabel, QHBoxLayout, QScrollArea,
                              QFrame, QSizePolicy, QGraphicsOpacityEffect)
@@ -23,6 +23,16 @@ class ChatWidget(QWidget):
         self.message_input.returnPressed.connect(self.send_message)
         self.scroll_bar = self.scroll_area.verticalScrollBar()
         self.scroll_bar.rangeChanged.connect(self.scroll_to_bottom)
+        self.messages_layout.setContentsMargins(15, 10, 15, 10)
+        self.messages_layout.setSpacing(10)
+
+        # Добавляем обработчик изменения размера
+        self.scroll_area.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj == self.scroll_area and event.type() == QEvent.Type.Resize:
+            self.scroll_to_bottom()
+        return super().eventFilter(obj, event)
 
     def setup_ui(self):
         # ========== Main Layout ==========
@@ -227,23 +237,25 @@ class ChatWidget(QWidget):
             sender_name="Вы" if is_my_message else "Собеседник"
         )
 
-        if is_my_message:
-            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
-                                              alignment=Qt.AlignmentFlag.AlignRight)
-        else:
-            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
-                                              alignment=Qt.AlignmentFlag.AlignLeft)
+        # Добавляем сообщение без stretch
+        self.messages_layout.addWidget(message_widget,
+                                       alignment=Qt.AlignmentFlag.AlignRight if is_my_message
+                                       else Qt.AlignmentFlag.AlignLeft)
+
+        # Прокручиваем вниз с небольшой задержкой
+        QTimer.singleShot(50, self.scroll_to_bottom)
 
     def scroll_to_bottom(self):
-        """Мгновенная прокрутка вниз (используется при инициализации)"""
-        self.scroll_bar.setValue(self.scroll_bar.maximum())
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        # Прокручиваем до максимального значения с небольшим запасом
+        scroll_bar.setValue(scroll_bar.maximum() + 10)
 
     def smooth_scroll_to_bottom(self):
-        """Плавная прокрутка вниз (используется при отправке сообщения)"""
-        anim = QPropertyAnimation(self.scroll_bar, b"value")
-        anim.setDuration(300)  # Длительность анимации в миллисекундах
-        anim.setStartValue(self.scroll_bar.value())
-        anim.setEndValue(self.scroll_bar.maximum())
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        anim = QPropertyAnimation(scroll_bar, b"value")
+        anim.setDuration(300)
+        anim.setStartValue(scroll_bar.value())
+        anim.setEndValue(scroll_bar.maximum() + 10)  # Небольшой запас
         anim.setEasingCurve(QEasingCurve.Type.OutQuad)
         anim.start()
 
@@ -324,21 +336,22 @@ class MessageWidget(QWidget):
         # Настройка стиля
         bg_color = "#855685" if is_my_message else "#2a2a2a"
         border_radius = "12px; border-bottom-right-radius: 4px;" if is_my_message else "12px; border-bottom-left-radius: 4px;"
-
+        radius = "12px" if is_my_message else "12px"
         self.message_container.setStyleSheet(f"""
             QWidget {{
                 background-color: {bg_color};
-                border-radius: {border_radius}
+                border-radius: {radius};
+                margin: 2px;
             }}
         """)
 
-        # Выравнивание сообщения
+        # Выравнивание
         if is_my_message:
-            self.layout.addStretch()
-            self.layout.addWidget(self.message_container)
+            self.layout.addStretch(1)
+            self.layout.addWidget(self.message_container, 0, Qt.AlignmentFlag.AlignRight)
         else:
-            self.layout.addWidget(self.message_container)
-            self.layout.addStretch()
+            self.layout.addWidget(self.message_container, 0, Qt.AlignmentFlag.AlignLeft)
+            self.layout.addStretch(1)
 
         # Минимальная/максимальная ширина сообщения
         self.setMaximumWidth(int(self.parent().width() * 0.7) if self.parent() else 300)
