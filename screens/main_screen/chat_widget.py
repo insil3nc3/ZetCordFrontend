@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, UTC
-from PyQt6.QtCore import pyqtSlot, Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QTimer, QEvent
+from PyQt6.QtCore import pyqtSlot, Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QTimer
 from PyQt6.QtWidgets import (QWidget, QTextEdit, QLineEdit, QPushButton,
                              QVBoxLayout, QLabel, QHBoxLayout, QScrollArea,
                              QFrame, QSizePolicy, QGraphicsOpacityEffect)
@@ -15,24 +15,15 @@ class ChatWidget(QWidget):
         self.user_id = user_id
         self.receiver_id = receiver_id
         self.receiver_name = receiver_name
-
+        self.animations = []
         self.setup_ui()
         self.setup_styles()
 
         self.send_button.clicked.connect(self.send_message)
         self.message_input.returnPressed.connect(self.send_message)
+        self.message_input.textEdited.connect(self.smooth_scroll_to_bottom)
         self.scroll_bar = self.scroll_area.verticalScrollBar()
         self.scroll_bar.rangeChanged.connect(self.scroll_to_bottom)
-        self.messages_layout.setContentsMargins(15, 10, 15, 10)
-        self.messages_layout.setSpacing(10)
-
-        # Добавляем обработчик изменения размера
-        self.scroll_area.installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        if obj == self.scroll_area and event.type() == QEvent.Type.Resize:
-            self.scroll_to_bottom()
-        return super().eventFilter(obj, event)
 
     def setup_ui(self):
         # ========== Main Layout ==========
@@ -193,12 +184,12 @@ class ChatWidget(QWidget):
         sender_id = message.get("sender_id")
         content = message.get("content", "")
         timestamp = message.get("timestamp", datetime.now(UTC).isoformat())
+        time_str = datetime.fromisoformat(timestamp).strftime("%H:%M")
 
         if not sender_id or not content:
             return
 
         is_my_message = sender_id == self.user_id
-        time_str = datetime.fromisoformat(timestamp).strftime("%H:%M")
 
         message_widget = MessageWidget(
             text=content,
@@ -237,69 +228,70 @@ class ChatWidget(QWidget):
             sender_name="Вы" if is_my_message else "Собеседник"
         )
 
-        # Добавляем сообщение без stretch
-        self.messages_layout.addWidget(message_widget,
-                                       alignment=Qt.AlignmentFlag.AlignRight if is_my_message
-                                       else Qt.AlignmentFlag.AlignLeft)
-
-        # Прокручиваем вниз с небольшой задержкой
-        QTimer.singleShot(50, self.scroll_to_bottom)
+        if is_my_message:
+            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
+                                              alignment=Qt.AlignmentFlag.AlignRight)
+        else:
+            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
+                                              alignment=Qt.AlignmentFlag.AlignLeft)
 
     def scroll_to_bottom(self):
-        scroll_bar = self.scroll_area.verticalScrollBar()
-        # Прокручиваем до максимального значения с небольшим запасом
-        scroll_bar.setValue(scroll_bar.maximum() + 10)
+        """Мгновенная прокрутка вниз (используется при инициализации)"""
+        self.scroll_bar.setValue(self.scroll_bar.maximum())
 
     def smooth_scroll_to_bottom(self):
-        scroll_bar = self.scroll_area.verticalScrollBar()
-        anim = QPropertyAnimation(scroll_bar, b"value")
-        anim.setDuration(300)
-        anim.setStartValue(scroll_bar.value())
-        anim.setEndValue(scroll_bar.maximum() + 10)  # Небольшой запас
+        """Плавная прокрутка вниз (используется при отправке сообщения)"""
+        anim = QPropertyAnimation(self.scroll_bar, b"value")
+        anim.setDuration(300)  # Длительность анимации в миллисекундах
+        anim.setStartValue(self.scroll_bar.value())
+        anim.setEndValue(self.scroll_bar.maximum())
         anim.setEasingCurve(QEasingCurve.Type.OutQuad)
         anim.start()
 
     def animate_message(self, message_widget, is_my_message):
-        # Сохраняем текущую позицию прокрутки
         scroll_bar = self.scroll_area.verticalScrollBar()
         was_at_bottom = scroll_bar.value() == scroll_bar.maximum()
 
-        # Начальная прозрачность
         opacity_effect = QGraphicsOpacityEffect(message_widget)
         message_widget.setGraphicsEffect(opacity_effect)
         opacity_effect.setOpacity(0)
 
-        # Анимация прозрачности
         opacity_anim = QPropertyAnimation(opacity_effect, b"opacity")
         opacity_anim.setDuration(300)
         opacity_anim.setStartValue(0)
         opacity_anim.setEndValue(1)
 
-        # Анимация положения
         pos_anim = QPropertyAnimation(message_widget, b"pos")
         pos_anim.setDuration(300)
         pos_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
-        if is_my_message:
-            pos_anim.setStartValue(QPoint(self.width(), message_widget.y()))
-        else:
-            pos_anim.setStartValue(QPoint(-message_widget.width(), message_widget.y()))
+        def start_animation():
+            final_pos = message_widget.pos()
+            if is_my_message:
+                pos_anim.setStartValue(QPoint(self.width(), final_pos.y()))
+            else:
+                pos_anim.setStartValue(QPoint(-message_widget.width(), final_pos.y()))
 
-        pos_anim.setEndValue(message_widget.pos())
+            pos_anim.setEndValue(final_pos)
 
-        # Группируем анимации
-        anim_group = QParallelAnimationGroup()
-        anim_group.addAnimation(opacity_anim)
-        anim_group.addAnimation(pos_anim)
+            anim_group = QParallelAnimationGroup()
+            anim_group.addAnimation(opacity_anim)
+            anim_group.addAnimation(pos_anim)
 
-        # Восстанавливаем прокрутку после анимации, если нужно
-        def restore_scroll():
-            if was_at_bottom:
-                self.scroll_to_bottom()
+            def restore_scroll():
+                if was_at_bottom:
+                    self.scroll_to_bottom()
 
-        anim_group.finished.connect(restore_scroll)
-        anim_group.start()
+            anim_group.finished.connect(restore_scroll)
+            anim_group.start()
 
+        # Откладываем запуск анимации, пока layout не выставит правильную позицию
+        QTimer.singleShot(0, start_animation)
+
+
+
+    def _animate_after_layout(self, widget, is_my_message):
+        self.animate_message(widget, is_my_message)
 
 class MessageWidget(QWidget):
     def __init__(self, text, is_my_message, timestamp, sender_name):
@@ -336,22 +328,21 @@ class MessageWidget(QWidget):
         # Настройка стиля
         bg_color = "#855685" if is_my_message else "#2a2a2a"
         border_radius = "12px; border-bottom-right-radius: 4px;" if is_my_message else "12px; border-bottom-left-radius: 4px;"
-        radius = "12px" if is_my_message else "12px"
+
         self.message_container.setStyleSheet(f"""
             QWidget {{
                 background-color: {bg_color};
-                border-radius: {radius};
-                margin: 2px;
+                border-radius: {border_radius}
             }}
         """)
 
-        # Выравнивание
+        # Выравнивание сообщения
         if is_my_message:
-            self.layout.addStretch(1)
-            self.layout.addWidget(self.message_container, 0, Qt.AlignmentFlag.AlignRight)
+            self.layout.addStretch()
+            self.layout.addWidget(self.message_container)
         else:
-            self.layout.addWidget(self.message_container, 0, Qt.AlignmentFlag.AlignLeft)
-            self.layout.addStretch(1)
+            self.layout.addWidget(self.message_container)
+            self.layout.addStretch()
 
         # Минимальная/максимальная ширина сообщения
         self.setMaximumWidth(int(self.parent().width() * 0.7) if self.parent() else 300)
