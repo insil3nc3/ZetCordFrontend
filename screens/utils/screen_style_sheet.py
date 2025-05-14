@@ -14,7 +14,7 @@ def load_custom_font(font_size: int = 12) -> QFont | None:
         return None
 
 screen_style = """
-    background-color: #121212;
+    background-color: #171418;
     color: #E8E8E8;
     font-family: 'Inter', sans-serif;
 """
