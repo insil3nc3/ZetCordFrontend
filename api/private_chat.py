@@ -21,7 +21,7 @@ async def create_chat(user_unique_name: str):
             )
 
             if response.status_code == 200 or response.status_code == 400:
-                return response.json()["_id"]
+                return response.json()
             elif response.status_code == 401:  # Токен просрочен
                 await refresh_tokens()  # Обновление токенов
                 headers["Authorization"] = f"Bearer {token_manager.get_access_token()}"
@@ -34,7 +34,7 @@ async def create_chat(user_unique_name: str):
                 )
 
                 if response.status_code == 200 or response.status_code == 400:
-                    return response.json()["_id"]
+                    return response.json()
                 else:
                     return {
                         "error": f"Unauthorized even after token refresh. Code: {response.status_code}, Detail: {response.text}"}
