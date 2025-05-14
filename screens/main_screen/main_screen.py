@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         self.top_group_container.setLayout(top_group_layout)
         self.top_group_container.setStyleSheet("""
             QWidget {
-                background-color: #1c1c1c;
+                background-color: #110f12;
                 border-top-left-radius: 10px;
                 border-right: 1px solid #444;
             }    
@@ -128,7 +128,7 @@ class MainWindow(QMainWindow):
         self.bottom_group_container.setLayout(bottom_group_layout)
         self.bottom_group_container.setStyleSheet("""
             QWidget {
-                background-color: #1c1c1c;
+                background-color: #110f12;
                 border-bottom-left-radius: 10px;
                 border-right: 1px solid #444;
             }    
@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
         self.top_dialog_container.setLayout(top_dialog_layout)
         self.top_dialog_container.setStyleSheet("""
             QWidget {
-                background-color: #1c1c1c;
+                background-color: #110f12;
                 border-top-right-radius: 10px;
                 border-left: 1px solid #444;
             }    
@@ -179,8 +179,8 @@ class MainWindow(QMainWindow):
 
         # ========== Chat area ==========
         self.chat_layout = QVBoxLayout()
-        main_layout.addLayout(self.chat_layout)
-        main_layout.addStretch()
+        main_layout.addLayout(self.chat_layout, 2)
+
         # ==============================
 
         # ========== List widgets configuration ==========
@@ -211,35 +211,43 @@ class MainWindow(QMainWindow):
         # ========== Stylesheets ==========
         self.dialogs_list.setStyleSheet("""
             QListWidget {
-                background-color: #1c1c1c;
+                background-color: #110f12;
                 border: none;
                 border-left: 1px solid #444;
                 margin: 0;
                 padding: 0;
                 border-bottom-right-radius: 10px;
             }
-            QListWidget::item:hover {
-                background-color: #4a4a4a;
-                border-radius:15px;
-            }
-            QListWidget::item:selected {
-                background: #855685;
-                border-radius: 20px;
-            }
             QListWidget::item {
                 background: transparent;
+                border: none;
+                margin: 0;
+                border-radius: 15px;
+                padding: 0;
+            }
+            QListWidget::item:hover {
+                background-color: #4a4a4a;
+                border-radius: 20px;
+            }
+            QListWidget::item:selected {
+                background: #383838;
+                border-radius: 20px;
+                border: none;
             }
             QListWidget::item:pressed {
-                background-color: none;
+                background: #6a4a6a;
+                border-radius: 20px;
+                border: none;
             }
             QListWidget::item:focus {
                 outline: none;
+                border: none;
             }
         """)
 
         self.groups_list.setStyleSheet("""
             QListWidget {
-                background-color: #1c1c1c;
+                background-color: #110f12;
                 border: none;
                 border-right: 1px solid #444;
                 margin: 0;
@@ -264,6 +272,9 @@ class MainWindow(QMainWindow):
         self.dialogs_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         # =============================
 
+        self.other_layout = QVBoxLayout()
+        main_layout.addLayout(self.other_layout, 1)
+
     def set_active_list(self, list_name):
         if list_name == self.active_list:
             return
@@ -280,34 +291,42 @@ class MainWindow(QMainWindow):
 
             self.dialogs_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border: none;
                     border-left: 1px solid #444;
                     margin: 0;
                     padding: 0;
                     border-bottom-right-radius: 10px;
                 }
-                QListWidget::item:hover {
-                    background-color: #4a4a4a;
-                    border-radius:15px;
-                }
-                QListWidget::item:selected {
-                    background: #855685;
-                    border-radius:20px;
-                }
                 QListWidget::item {
                     background: transparent;
+                    border: none;
+                    margin: 0;
+                    border-radius: 15px;
+                    padding: 0;
+                }
+                QListWidget::item:hover {
+                    background-color: #4a4a4a;
+                    border-radius: 20px;
+                }
+                QListWidget::item:selected {
+                    background: #383838;
+                    border-radius: 20px;
+                    border: none;
                 }
                 QListWidget::item:pressed {
-                    background-color: none;
+                    background: #6a4a6a;
+                    border-radius: 20px;
+                    border: none;
                 }
                 QListWidget::item:focus {
                     outline: none;
+                    border: none;
                 }
             """)
             self.groups_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border: none;
                     border-right: 1px solid #444;
                     padding: 0;
@@ -324,29 +343,29 @@ class MainWindow(QMainWindow):
             """)
             self.top_dialog_container.setStyleSheet("""
                 QWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border-top-right-radius: 10px;
                     border-left: 1px solid #444;
                 }    
                 """)
             self.top_group_container.setStyleSheet("""
                 QWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border-top-left-radius: 10px;
                     border-right: 1px solid #444;
                 }    
                 """)
             self.bottom_group_container.setStyleSheet("""
                 QWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border-bottom-left-radius: 10px;
                     border-right: 1px solid #444;
                 }    
                 """)
         else:
-            self.dialogs_list.setFixedWidth(100)
+            self.dialogs_list.setFixedWidth(120)
             self.search_button.setFixedWidth(90)
-            self.groups_list.setFixedWidth(200)
+            self.groups_list.setFixedWidth(180)
             self.search_group.setFixedWidth(150)
             self.search_group.edit_text("Найти группу")
             self.create_group.setFixedWidth(80)
@@ -354,34 +373,42 @@ class MainWindow(QMainWindow):
 
             self.dialogs_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border: none;
                     border-left: 1px solid #444;
                     margin: 0;
                     padding: 0;
                     border-bottom-right-radius: 10px;
                 }
-                QListWidget::item:hover {
-                    background-color: #4a4a4a;
-                    border-radius:15px;
-                }
-                QListWidget::item:selected {
-                    background: #855685;
-                    border-radius:20px;
-                }
                 QListWidget::item {
                     background: transparent;
+                    border: none;
+                    margin: 0;
+                    border-radius: 15px;
+                    padding: 0;
+                }
+                QListWidget::item:hover {
+                    background-color: #4a4a4a;
+                    border-radius: 20px;
+                }
+                QListWidget::item:selected {
+                    background: #383838;
+                    border-radius: 20px;
+                    border: none;
                 }
                 QListWidget::item:pressed {
-                    background-color: none;
+                    background: #6a4a6a;
+                    border-radius: 20px;
+                    border: none;
                 }
                 QListWidget::item:focus {
                     outline: none;
+                    border: none;
                 }
             """)
             self.groups_list.setStyleSheet("""
                 QListWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border: none;
                     padding: 0;
                     margin: 0;
@@ -398,21 +425,21 @@ class MainWindow(QMainWindow):
             """)
             self.top_dialog_container.setStyleSheet("""
                 QWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border-top-right-radius: 10px;
                     border-left: 1px solid #444;
                 }    
                 """)
             self.top_group_container.setStyleSheet("""
                 QWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border-top-left-radius: 10px;
                     border-right: 1px solid #444;
                 }    
                 """)
             self.bottom_group_container.setStyleSheet("""
                 QWidget {
-                    background-color: #1c1c1c;
+                    background-color: #110f12;
                     border-bottom-left-radius: 10px;
                     border-right: 1px solid #444;
                 }    
@@ -440,7 +467,7 @@ class MainWindow(QMainWindow):
         self.client.send_json({"type": "init"})
 
     def search_user(self):
-        search_user_widget = UserSearchWidget(self, self.user_start_data['profile_data']["id"])
+        search_user_widget = UserSearchWidget(self.open_chat, self.insert_item_to_dialog_list, self.focus_to_widget, parent=self, cur_user=self.user_start_data['profile_data']["id"])
         search_user_widget.show()
 
     @pyqtSlot(str)
@@ -455,7 +482,7 @@ class MainWindow(QMainWindow):
             elif data["type"] == "chat_message":
                 if data["chat_id"] == self.cur_chat_id:
                     if self.chat_widget:
-                        self.chat_widget.append_message(data)
+                        self.chat_widget.add_message(data["message"])
             elif data["type"] == "chat_history":
                 if data["chat_id"] == self.cur_chat_id:
                     if self.chat_widget:
@@ -477,24 +504,32 @@ class MainWindow(QMainWindow):
 
     def on_dialog_item_clicked(self, item):
         # ========== Обработка клика по элементу dialogs_list ==========
-        cur_widget = self.dialogs_list.itemWidget(item)
-        if not cur_widget:
+        self.cur_widget = self.dialogs_list.itemWidget(item)
+        if not self.cur_widget:
             # print("Ошибка: Виджет не найден для элемента")
             return
         try:
-            chat_id = cur_widget.chat_id
-            if self.chat_widget:
-                self.chat_widget.deleteLater()
-            self.cur_chat_id = cur_widget.chat_id
-            data = {"type": "chat_history",
-                    "chat_id": self.cur_chat_id
-                    }
-            self.send_via_ws(data)
-            self.chat_widget = ChatWidget(self.user_start_data["profile_data"]["id"], chat_id, cur_widget.user_id, self.send_via_ws)
-            self.chat_layout.addWidget(self.chat_widget)
+            chat_id = self.cur_widget.chat_id
+            self.cur_chat_id = self.cur_widget.chat_id
+            self.open_chat(chat_id, self.cur_widget.user_id, self.cur_widget.username)
         except AttributeError:
             # print("Ошибка: Атрибут chat_id не найден в виджете")
             return
+
+    def open_chat(self, chat_id, receiver_id, username):
+        self.cur_chat_id = chat_id
+        if self.chat_widget:
+            self.chat_widget.deleteLater()
+        data = {"type": "chat_history",
+                "chat_id": chat_id
+                }
+        self.chat_widget = ChatWidget(self.user_start_data["profile_data"]["id"], chat_id, receiver_id, username, self.send_via_ws, self.update_last_msg)
+        self.send_via_ws(data)
+        self.chat_layout.addWidget(self.chat_widget)
+
+    def update_last_msg(self, text):
+        if self.cur_widget:
+            self.cur_widget.update_last_message(text)
 
     def send_via_ws(self, message_data: dict):
         self.client.send_json(message_data)
@@ -514,30 +549,45 @@ class MainWindow(QMainWindow):
                 self.user2_id = dialog.get("user1_id")
             user2 = await get_user_info(self.user2_id)
             avatar_path = await download_avatar(self.user2_id)
-            widget = DialogItem(
+            self.widget = self.insert_item_to_dialog_list(
                 username=user2.get("nickname"),
                 last_msg=last_msg,
                 avatar_path=avatar_path,
                 chat_id=dialog.get("_id"),
                 user_id=self.user2_id
             )
-            item = QListWidgetItem()
-            item.setSizeHint(widget.sizeHint())
-            self.dialogs_list.addItem(item)
-            self.dialogs_list.setItemWidget(item, widget)
         # ==============================
         # Сохраняем ссылку на виджеты для управления
         self.item_widgets = [self.dialogs_list.itemWidget(self.dialogs_list.item(i)) for i in
                              range(self.dialogs_list.count())]
 
-        # Подключаем обработчик выделения
-        # self.dialogs_list.currentItemChanged.connect(self.on_item_selected)
+    def insert_item_to_dialog_list(self, username, last_msg, avatar_path, chat_id, user_id):
+        widget = DialogItem(
+            username=username,
+            last_msg=last_msg,
+            avatar_path=avatar_path,
+            chat_id=chat_id,
+            user_id=user_id
+        )
+        item = QListWidgetItem()
+        item.setSizeHint(widget.sizeHint())
+        self.dialogs_list.addItem(item)
+        self.dialogs_list.setItemWidget(item, widget)
+        return widget
 
-    def on_item_selected(self, current, previous):
-        for i in range(self.dialogs_list.count()):
-            item = self.dialogs_list.item(i)
+    def get_list_index(self, target_id):
+        for index in range(self.dialogs_list.count()):
+            item = self.dialogs_list.item(index)
             widget = self.dialogs_list.itemWidget(item)
-            if item is current:
-                widget.set_selected_style()
-            else:
-                widget.set_default_style()
+            if widget and getattr(widget, "user_id", None) == target_id:
+                return index
+            widget.set_default_style()
+        return -1  # если не найдено
+
+    def focus_to_widget(self, target):
+        index = self.get_list_index(target)
+        print(index)
+        if index != -1:
+            self.dialogs_list.setCurrentRow(index)
+            item = self.dialogs_list.item(index)
+            widget = self.dialogs_list.itemWidget(item)
