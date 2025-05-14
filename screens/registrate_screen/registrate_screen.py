@@ -123,7 +123,7 @@ class RegistrateWindow(QMainWindow):
 
         # Создаем и показываем MainWindow
         try:
-            self.main_window = MainWindow(user_start_data)
+            self.main_window = MainWindow()
             self.main_window.show()
             self.close()  # Закрываем текущее окно только после отображения MainWindow
         except Exception as e:
