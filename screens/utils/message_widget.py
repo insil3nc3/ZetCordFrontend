@@ -2,7 +2,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSizePolicy
 
 from screens.utils.screen_style_sheet import load_custom_font
 
@@ -42,7 +42,10 @@ class MessageWidget(QWidget):
         # ========== Msg text ==========
         self.text = QLabel(self.msg_text)
         self.text.setFont(QFont("Inter", 12, QFont.Weight.Normal))
+        self.text.setWordWrap(True)
+        self.text.setMaximumWidth(500)
         self.text.setStyleSheet("color: #FFFFFF;")
+
         msg_layout.addWidget(self.text)
 
         # ==============================
