@@ -1,348 +1,211 @@
 import asyncio
 from datetime import datetime, UTC
-from PyQt6.QtCore import pyqtSlot, Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup, QTimer
-from PyQt6.QtWidgets import (QWidget, QTextEdit, QLineEdit, QPushButton,
-                             QVBoxLayout, QLabel, QHBoxLayout, QScrollArea,
-                             QFrame, QSizePolicy, QGraphicsOpacityEffect)
-from PyQt6.QtGui import QColor, QTextCursor, QIcon, QPixmap
+
+from PyQt6.QtGui import QPixmap, QFont, QIcon, QCursor, QPalette, QColor
+from alembic.command import history
+
+from api.profile_actions import get_avatar_path
+from screens.utils.circular_photo import create_circular_pixmap
+from screens.utils.default_avatar import default_ava_path
+from screens.utils.enter_text_edit import EnterTextEdit
+from screens.utils.message_widget import MessageWidget
+from PyQt6.QtCore import pyqtSlot, Qt, QTime, QTimer, QSize
+from PyQt6.QtWidgets import QWidget, QTextEdit, QLineEdit, QPushButton, QVBoxLayout, QLabel, QScrollArea, QFrame, \
+    QHBoxLayout
+import os
+from screens.utils.screen_style_sheet import load_custom_font
 
 
 class ChatWidget(QWidget):
-    def __init__(self, user_id, chat_id, receiver_id, send_via_ws, receiver_name):
+    def __init__(self, user_id, chat_id, receiver_id, username, send_via_ws, update_last_msg_callback):
         super().__init__()
         self.send_via_ws = send_via_ws
         self.chat_id = chat_id
         self.user_id = user_id
         self.receiver_id = receiver_id
-        self.receiver_name = receiver_name
-        self.animations = []
-        self.setup_ui()
-        self.setup_styles()
+        self.username = username
+        self.message = None
+        self.update_last_msg_callback = update_last_msg_callback
+        self.user_avatar_path = get_avatar_path(self.user_id)
+        self.receiver_avatar_path = get_avatar_path(self.receiver_id)
+        # Настройка интерфейса
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 0, 0)
+        layout.setSpacing(0)
+        # ====== загрузка шрифта ======
+        font = load_custom_font(12)
+        if font:
+            self.setFont(font)
+        # ==========================
+        # ========== Top bar ==========
+        bar_container = QWidget()
+        bar_layout = QHBoxLayout()
+        bar_layout.setContentsMargins(10, 0, 10, 0)
+        bar_layout.setSpacing(10)
 
-        self.send_button.clicked.connect(self.send_message)
-        self.message_input.returnPressed.connect(self.send_message)
-        self.message_input.textEdited.connect(self.smooth_scroll_to_bottom)
-        self.scroll_bar = self.scroll_area.verticalScrollBar()
-        self.scroll_bar.rangeChanged.connect(self.scroll_to_bottom)
+        # Аватар получателя (сверху)
+        self.receiver_bar_avatar = QLabel()
+        selected_path = self.receiver_avatar_path if self.receiver_avatar_path else default_ava_path
+        pixmap = QPixmap(selected_path)
+        circular_pixmap = create_circular_pixmap(pixmap, 50)
+        self.receiver_bar_avatar.setPixmap(circular_pixmap)
+        self.receiver_bar_avatar.setFixedSize(50, 50)
+        self.receiver_bar_avatar.setStyleSheet("background: transparent;")
+        bar_layout.addWidget(self.receiver_bar_avatar)
+        name_last_seen_layout = QVBoxLayout()
+        self.receiver_name = QLabel(self.username)
+        self.receiver_name.setStyleSheet("color: #FFFFFF;")
+        self.receiver_name.setFont(QFont("Inter", 14, QFont.Weight.Bold))
 
-    def setup_ui(self):
-        # ========== Main Layout ==========
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
+        self.last_seen = QLabel("был(а) недавно")
+        self.last_seen.setStyleSheet("color: gray;")
+        self.last_seen.setFont(QFont("Inter", 12, QFont.Weight.Normal))
+        name_last_seen_layout.setSpacing(0)
+        name_last_seen_layout.setContentsMargins(0, 0, 0, 0)
+        name_last_seen_layout.addStretch()
+        name_last_seen_layout.addWidget(self.receiver_name, alignment=Qt.AlignmentFlag.AlignBottom)
+        name_last_seen_layout.addWidget(self.last_seen, alignment=Qt.AlignmentFlag.AlignTop)
+        name_last_seen_layout.addStretch()
+        bar_layout.addLayout(name_last_seen_layout)
+        bar_container.setStyleSheet("""
+            background-color: #1f1b24;
+            border-top-right-radius: 10px;
+            border-top-left-radius: 10px;
+        """)
+        bar_container.setLayout(bar_layout)
+        bar_container.setFixedHeight(60)
+        layout.addWidget(bar_container)
+        # =============================
 
-        # ========== Chat Header ==========
-        self.header = QWidget()
-        self.header.setFixedHeight(50)
-        header_layout = QHBoxLayout(self.header)
-        header_layout.setContentsMargins(15, 0, 15, 0)
 
-        self.back_button = QPushButton()
-        self.back_button.setIcon(QIcon.fromTheme("go-previous"))
-        self.back_button.setFlat(True)
-
-        self.contact_name = QLabel(self.receiver_name)  # Замените на реальное имя
-        self.contact_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        header_layout.addWidget(self.back_button)
-        header_layout.addWidget(self.contact_name)
-        header_layout.addStretch()
-
-        # ========== Messages Area ==========
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("background-color: #272428;")
+        self.messages_widget = QWidget()
+        self.messages_layout = QVBoxLayout(self.messages_widget)
+        self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.scroll_area.setWidget(self.messages_widget)
+        layout.addWidget(self.scroll_area)
 
-        self.messages_container = QWidget()
-        self.messages_layout = QVBoxLayout(self.messages_container)
-        self.messages_layout.setContentsMargins(15, 10, 15, 10)
-        self.messages_layout.setSpacing(10)
-        self.messages_container.setStyleSheet("background: transparent;")
-        self.messages_layout.addStretch()  # Push messages to top
-        self.messages_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.scroll_area.setWidget(self.messages_container)
-
-        # ========== Input Area ==========
-        self.input_container = QWidget()
-        self.input_container.setFixedHeight(70)
-        input_layout = QHBoxLayout(self.input_container)
-        input_layout.setContentsMargins(15, 5, 15, 15)
-
-        self.message_input = QLineEdit()
-        self.message_input.setPlaceholderText("Написать сообщение...")
-        self.message_input.setMinimumHeight(40)
-
-        self.send_button = QPushButton()
-        self.send_button.setIcon(QIcon.fromTheme("mail-send"))
-        self.send_button.setFixedSize(40, 40)
-
-        input_layout.addWidget(self.message_input)
-        input_layout.addWidget(self.send_button)
-
-        # ========== Assemble Main Layout ==========
-        self.main_layout.addWidget(self.header)
-        self.main_layout.addWidget(self.scroll_area)
-        self.main_layout.addWidget(self.input_container)
-
-    def setup_styles(self):
-        # ========== Global Styles ==========
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border: none;
-            }
-            QScrollArea {
-                border: none;
-                background: transparent;
-            }
-            QScrollBar:vertical {
-                background: #2a2a2a;
-                width: 8px;
-                margin: 0;
-            }
-            QScrollBar::handle:vertical {
-                background: #4a4a4a;
-                min-height: 20px;
-                border-radius: 4px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
+        self.bottom_container = QWidget()
+        self.bottom_container.setStyleSheet("""
+            background-color: #1f1b24;
+            border-bottom-right-radius: 10px;
+            border-bottom-left-radius: 10px;
         """)
+        bottom_layout = QHBoxLayout()
+        self.text_input = EnterTextEdit()
+        self.text_input.setPlaceholderText("Сообщение...")
+        self.text_input.setMinimumHeight(35)  # Задаём стартовую высоту
+        self.text_input.setFixedHeight(35)
+        palette = self.text_input.palette()
+        palette.setColor(QPalette.ColorRole.Highlight, QColor("#4a2a3a"))  # Тёмно-бледно-бордовый фон
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))  # Белый текст при выделении
+        self.text_input.setPalette(palette)
+        self.text_input.height_changed.connect(self.adjust_bottom_height)
+        self.text_input.enter_pressed.connect(self.send_message)
+        self.text_input.setFont(QFont("Inter", 11, QFont.Weight.Normal))
+        self.adjust_bottom_height(self.text_input.height())
+        bottom_layout.addWidget(self.text_input)
 
-        # ========== Header Styles ==========
-        self.header.setStyleSheet("""
-            QWidget {
-                background-color: #2a2a2a;
-                border-bottom: 1px solid #444;
-            }
-            QLabel {
-                font-size: 16px;
-                font-weight: bold;
-            }
+        send_button = QPushButton()
+        icon_path = os.path.join("..", "icons", "send_icon.png")
+        send_button.setIcon(QIcon(icon_path))
+        send_button.setIconSize(QSize(35, 35))
+        send_button.setStyleSheet("""
             QPushButton {
-                background: transparent;
                 border: none;
-                padding: 5px;
             }
         """)
+        send_button.clicked.connect(self.send_message)
+        send_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        bottom_layout.addWidget(send_button)
+        bottom_layout.setContentsMargins(10, 10, 10, 10)  # сверху и снизу добавлены по 5px
+        self.bottom_container.setLayout(bottom_layout)
+        layout.addWidget(self.bottom_container)
 
-        # ========== Input Area Styles ==========
-        self.input_container.setStyleSheet("""
-            QWidget {
-                background-color: #2a2a2a;
-                border-top: 1px solid #444;
-            }
-            QLineEdit {
-                background-color: #333333;
-                border: 1px solid #444;
-                border-radius: 15px;
-                padding: 8px 15px;
-                font-size: 14px;
-                color: white;
-            }
-            QPushButton {
-                background-color: #855685;
-                border: none;
-                border-radius: 20px;
-            }
-            QPushButton:hover {
-                background-color: #9a68a8;
-            }
-            QPushButton:pressed {
-                background-color: #6a4a6a;
-            }
-        """)
+
+        # ========== Avatars ==========
+        self.user_avatar = QLabel()
+        selected_path = self.user_avatar_path if self.user_avatar_path else default_ava_path
+        pixmap = QPixmap(selected_path)
+        circular_pixmap = create_circular_pixmap(pixmap, 40)
+        self.user_avatar.setPixmap(circular_pixmap)
+        self.user_avatar.setStyleSheet("background: transparent;")
+
+        self.receiver_avatar = QLabel()
+        selected_path = self.receiver_avatar_path if self.receiver_avatar_path else default_ava_path
+        pixmap = QPixmap(selected_path)
+        circular_pixmap = create_circular_pixmap(pixmap, 40)
+        self.receiver_avatar.setPixmap(circular_pixmap)
+        self.receiver_avatar.setStyleSheet("background: transparent;")
+        # ==============================
+
+
+        self.setLayout(layout)
+
+    def adjust_bottom_height(self, new_text_height):
+        total_height = new_text_height + 20
+        self.bottom_container.setFixedHeight(total_height)
+
+    def add_message(self, data, history = None):
+        sender_id = data.get("sender_id")
+        msg_sender = "user" if sender_id == self.user_id else "receiver"
+
+        # Проверка: сменился ли отправитель
+        new_sender = True
+        if self.message:
+            prev_sender = self.message.msg_sender
+            if prev_sender == msg_sender:
+                new_sender = False
+
+        # Обёртка одного сообщения
+        message_container = QWidget()
+        msg_container_layout = QHBoxLayout(message_container)
+        msg_container_layout.setContentsMargins(5, 0 if not new_sender else 10, 5, 0)
+        msg_container_layout.setSpacing(10)
+
+        # Аватарка (только если новый отправитель)
+        if new_sender:
+            avatar = QLabel()
+            selected_path = self.user_avatar_path if msg_sender == "user" else self.receiver_avatar_path
+            pixmap = QPixmap(selected_path if selected_path else default_ava_path)
+            circular_pixmap = create_circular_pixmap(pixmap, 40)
+            avatar.setPixmap(circular_pixmap)
+            avatar.setStyleSheet("background: transparent;")
+            msg_container_layout.addWidget(avatar)
+        else:
+            # добавим пустое пространство под аватарку (чтобы текст выровнялся)
+            spacer = QWidget()
+            spacer.setFixedWidth(40)
+            msg_container_layout.addWidget(spacer)
+
+        # Само сообщение
+        self.message = MessageWidget(data, msg_sender)
+        msg_container_layout.addWidget(self.message)
+        if not history:
+            self.update_last_msg_callback(data["content"])
+        self.messages_layout.addWidget(message_container)
 
     def send_message(self):
-        message_text = self.message_input.text().strip()
-        if not message_text:
-            return
-
-        message_data = {
+        text = self.text_input.toPlainText().strip()
+        data = {
             "type": "chat_message",
             "chat_id": self.chat_id,
             "receiver_id": self.receiver_id,
-            "content": message_text,
+            "content": text
         }
+        self.send_via_ws(data)
+        self.text_input.clear()
 
-        try:
-            self.send_via_ws(message_data)
-            self.add_message(self.user_id, message_text, is_my_message=True)
-        except Exception as e:
-            print(f"Ошибка при отправке сообщения: {e}")
 
-        self.message_input.clear()
-        self.smooth_scroll_to_bottom()
-
-    def append_message(self, message_data: dict):
-        if not message_data or "message" not in message_data:
-            return
-
-        message = message_data["message"]
-        sender_id = message.get("sender_id")
-        content = message.get("content", "")
-        timestamp = message.get("timestamp", datetime.now(UTC).isoformat())
-        time_str = datetime.fromisoformat(timestamp).strftime("%H:%M")
-
-        if not sender_id or not content:
-            return
-
-        is_my_message = sender_id == self.user_id
-
-        message_widget = MessageWidget(
-            text=content,
-            is_my_message=is_my_message,
-            timestamp=time_str,
-            sender_name="Вы" if is_my_message else "Собеседник"
-        )
-
-        # Анимация
-        self.animate_message(message_widget, is_my_message)
-
-        # Добавляем в layout
-        if is_my_message:
-            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
-                                              alignment=Qt.AlignmentFlag.AlignRight)
-        else:
-            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
-                                              alignment=Qt.AlignmentFlag.AlignLeft)
-
-        self.scroll_to_bottom()
-
-    def show_history(self, messages_data: list):
-        for message_data in reversed(messages_data):
-            sender_id = message_data.get("sender_id")
-            content = message_data.get("content")
-            self.add_message(sender_id, content, is_my_message=(sender_id == self.user_id))
-
-        # Прокрутка вниз после загрузки истории
-        self.scroll_to_bottom()
-
-    def add_message(self, sender_id, content, is_my_message):
-        message_widget = MessageWidget(
-            text=content,
-            is_my_message=is_my_message,
-            timestamp=datetime.now(UTC).strftime("%H:%M"),
-            sender_name="Вы" if is_my_message else "Собеседник"
-        )
-
-        if is_my_message:
-            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
-                                              alignment=Qt.AlignmentFlag.AlignRight)
-        else:
-            self.messages_layout.insertWidget(self.messages_layout.count() - 1, message_widget,
-                                              alignment=Qt.AlignmentFlag.AlignLeft)
+    def show_history(self, messages_data: dict):
+        messages_data = messages_data[::-1]
+        for message_data in messages_data:
+            self.add_message(message_data, history=True)
+        self.messages_widget.adjustSize()
+        self.messages_widget.updateGeometry()
+        QTimer.singleShot(0, self.scroll_to_bottom)
 
     def scroll_to_bottom(self):
-        """Мгновенная прокрутка вниз (используется при инициализации)"""
-        self.scroll_bar.setValue(self.scroll_bar.maximum())
-
-    def smooth_scroll_to_bottom(self):
-        """Плавная прокрутка вниз (используется при отправке сообщения)"""
-        anim = QPropertyAnimation(self.scroll_bar, b"value")
-        anim.setDuration(300)  # Длительность анимации в миллисекундах
-        anim.setStartValue(self.scroll_bar.value())
-        anim.setEndValue(self.scroll_bar.maximum())
-        anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-        anim.start()
-
-    def animate_message(self, message_widget, is_my_message):
-        scroll_bar = self.scroll_area.verticalScrollBar()
-        was_at_bottom = scroll_bar.value() == scroll_bar.maximum()
-
-        opacity_effect = QGraphicsOpacityEffect(message_widget)
-        message_widget.setGraphicsEffect(opacity_effect)
-        opacity_effect.setOpacity(0)
-
-        opacity_anim = QPropertyAnimation(opacity_effect, b"opacity")
-        opacity_anim.setDuration(300)
-        opacity_anim.setStartValue(0)
-        opacity_anim.setEndValue(1)
-
-        pos_anim = QPropertyAnimation(message_widget, b"pos")
-        pos_anim.setDuration(300)
-        pos_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-
-        def start_animation():
-            final_pos = message_widget.pos()
-            if is_my_message:
-                pos_anim.setStartValue(QPoint(self.width(), final_pos.y()))
-            else:
-                pos_anim.setStartValue(QPoint(-message_widget.width(), final_pos.y()))
-
-            pos_anim.setEndValue(final_pos)
-
-            anim_group = QParallelAnimationGroup()
-            anim_group.addAnimation(opacity_anim)
-            anim_group.addAnimation(pos_anim)
-
-            def restore_scroll():
-                if was_at_bottom:
-                    self.scroll_to_bottom()
-
-            anim_group.finished.connect(restore_scroll)
-            anim_group.start()
-
-        # Откладываем запуск анимации, пока layout не выставит правильную позицию
-        QTimer.singleShot(0, start_animation)
-
-
-
-    def _animate_after_layout(self, widget, is_my_message):
-        self.animate_message(widget, is_my_message)
-
-class MessageWidget(QWidget):
-    def __init__(self, text, is_my_message, timestamp, sender_name):
-        super().__init__()
-
-        self.is_my_message = is_my_message
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-
-        # Контейнер для сообщения
-        self.message_container = QWidget()
-        message_layout = QVBoxLayout(self.message_container)
-        message_layout.setContentsMargins(12, 8, 12, 8)
-
-        # Имя отправителя (только для чужих сообщений)
-        if not is_my_message:
-            self.sender_label = QLabel(sender_name)
-            self.sender_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-            message_layout.addWidget(self.sender_label)
-
-        # Текст сообщения
-        self.message_label = QLabel(text)
-        self.message_label.setWordWrap(True)
-        self.message_label.setStyleSheet("color: white;")
-        self.message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        message_layout.addWidget(self.message_label)
-
-        # Время отправки
-        self.time_label = QLabel(timestamp)
-        self.time_label.setStyleSheet("color: #aaaaaa; font-size: 10px;")
-        self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        message_layout.addWidget(self.time_label)
-
-        # Настройка стиля
-        bg_color = "#855685" if is_my_message else "#2a2a2a"
-        border_radius = "12px; border-bottom-right-radius: 4px;" if is_my_message else "12px; border-bottom-left-radius: 4px;"
-
-        self.message_container.setStyleSheet(f"""
-            QWidget {{
-                background-color: {bg_color};
-                border-radius: {border_radius}
-            }}
-        """)
-
-        # Выравнивание сообщения
-        if is_my_message:
-            self.layout.addStretch()
-            self.layout.addWidget(self.message_container)
-        else:
-            self.layout.addWidget(self.message_container)
-            self.layout.addStretch()
-
-        # Минимальная/максимальная ширина сообщения
-        self.setMaximumWidth(int(self.parent().width() * 0.7) if self.parent() else 300)
+        self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
