@@ -89,7 +89,7 @@ def get_avatar_path(user_profile_id: int):
     avatar_path = os.path.join(cache_dir ,f"{user_profile_id}.jpg")
     return avatar_path
 
-async def download_avatar(user_profile_id: int) -> Path | None:
+async def download_avatar(user_profile_id: int) -> str | None:
     headers = {
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
@@ -169,6 +169,8 @@ async def search_user(unique_name: str):
         response = await client.get(url=f"{API_URL}/get_user/{unique_name}", headers=headers, params={"user_unique_name": unique_name})
         if response.status_code == 200:
             return response.json()
+        elif response.status_code == 404:
+            return {"request error": "User not found"}
         elif response.status_code == 401:
             await refresh_tokens()
             headers["Authorization"] = f"Bearer {token_manager.get_access_token()}"
