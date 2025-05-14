@@ -4,35 +4,67 @@ from PyQt6.QtGui import QColor, QFont, QCursor
 from PyQt6.QtCore import Qt
 
 class StyledAnimatedButton(QPushButton):
-    def __init__(self, text="", parent=None, def_color=None):
+    def __init__(self, text="", parent=None, def_color="#333333", btn_style="default", width=300, height=50, font_size=18, border_radius=6):
         super().__init__(text, parent)
 
-        # Основные стили
-        if not def_color:
-            default_color = "#333333"
+        self.width = width
+        self.height = height
+        self._style = btn_style
+        self.def_color = def_color
+        self.font_size = font_size
+        self.border_radius = border_radius
+
+        if self._style == "default":
+            self._default_bg = QColor(self.def_color)
+            self._hover_bg = QColor("#1c1c1c")        # Фиолетовый
+            self._pressed_bg = QColor("transparent")      # Глубокий фиолетовый
+
+            self._default_text = QColor("white")
+            self._hover_text = QColor("white")
+            self._pressed_text = QColor("white")
+
+            self._default_border = QColor(self.def_color)
+            self._hover_border = QColor("#9B4DCA")
+            self._pressed_border = QColor("#9B4DCA")
+
+        elif self._style == "positive":
+            self._default_bg = QColor("#264d3b")
+            self._hover_bg = QColor("#3c8d40")
+            self._pressed_bg = QColor("#2e7033")
+
+            self._default_text = QColor("#84e1a0")
+            self._hover_text = QColor("#FFFFFF")
+            self._pressed_text = QColor("#b2ffcc")
+
+            self._default_border = QColor("#264d3b")
+            self._hover_border = QColor("#3c8d40")
+            self._pressed_border = QColor("#3C8D40")
+
+        elif self._style == "negative":
+            self._default_bg = QColor("#4d2626")
+            self._hover_bg = QColor("#a93226")
+            self._pressed_bg = QColor("#7b1e1e")
+
+            self._default_text = QColor("#ff9999")
+            self._hover_text = QColor("#FFFFFF")
+            self._pressed_text = QColor("#ffcccc")
+
+            self._default_border = QColor("#4d2626")
+            self._hover_border = QColor("#a93226")
+            self._pressed_border = QColor("#A93226")
+
         else:
-            default_color = def_color
-        self._default_bg = QColor(default_color)
-        self._hover_bg = QColor("#9B4DCA")
-        self._pressed_bg = QColor("#2C1D6A")
+            raise ValueError("btn_style должен быть 'default', 'positive' или 'negative'")
 
-        self._default_text = QColor("#9B4DCA")
-        self._hover_text = QColor("#FFFFFF")
-        self._pressed_text = QColor("#E1A9FF")
-
-        self._default_border = QColor("transparent")
-        self._hover_border = QColor("#9B4DCA")
-        self._pressed_border = QColor("#9B4DCA")
-
-        # Текущие значения
         self._bg_color = self._default_bg
         self._text_color = self._default_text
         self._border_color = self._default_border
 
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setFont(QFont('Inter', 18, QFont.Weight.Bold))
-        self.setFixedHeight(50)
-        self.setFixedWidth(300)
+        self.setFont(QFont('Inter', self.font_size, QFont.Weight.Bold))
+        self.setFixedHeight(self.height)
+
+        self.setFixedWidth(self.width)
 
         self._bg_anim = QPropertyAnimation(self, b"bgColor", self)
         self._text_anim = QPropertyAnimation(self, b"textColor", self)
@@ -53,32 +85,14 @@ class StyledAnimatedButton(QPushButton):
         return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event):
-        # Быстрая анимация "нажатия"
-        self._animate_to(
-            self._pressed_bg,
-            self._pressed_text,
-            self._pressed_border,
-            duration=100  # Ускоренная анимация
-        )
+        self._animate_to(self._pressed_bg, self._pressed_text, self._pressed_border, duration=100)
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
         if self.rect().contains(event.pos()):
-            # Если курсор всё ещё над кнопкой — плавно вернёмся в "hover"
-            self._animate_to(
-                self._hover_bg,
-                self._hover_text,
-                self._hover_border,
-                duration=300
-            )
+            self._animate_to(self._hover_bg, self._hover_text, self._hover_border, duration=300)
         else:
-            # Если ушёл — вернёмся в обычный стиль
-            self._animate_to(
-                self._default_bg,
-                self._default_text,
-                self._default_border,
-                duration=300
-            )
+            self._animate_to(self._default_bg, self._default_text, self._default_border, duration=300)
         super().mouseReleaseEvent(event)
 
     def _animate_to(self, bg, text, border, duration=300):
@@ -93,11 +107,6 @@ class StyledAnimatedButton(QPushButton):
         start(self._text_anim, "_text_color", text)
         start(self._border_anim, "_border_color", border)
 
-        # Обновляем целевые значения
-        self._target_bg = bg
-        self._target_text = text
-        self._target_border = border
-
     def update_stylesheet(self):
         border_style = (
             "none" if self._border_color.alpha() == 0
@@ -109,13 +118,12 @@ class StyledAnimatedButton(QPushButton):
                 background-color: {self._bg_color.name()};
                 color: {self._text_color.name()};
                 border: {border_style};
-                font-size: 18px;
-                padding: 10px;
-                border-radius: 6px;
+                font-size: {self.font_size}px;
+                padding: 5px;
+                border-radius: {self.border_radius}px;
             }}
         """)
 
-    # Свойства
     def get_bg_color(self): return self._bg_color
     def set_bg_color(self, color):
         self._bg_color = color
@@ -133,3 +141,6 @@ class StyledAnimatedButton(QPushButton):
         self._border_color = color
         self.update_stylesheet()
     borderColor = pyqtProperty(QColor, fget=get_border_color, fset=set_border_color)
+
+    def edit_text(self, text):
+        self.setText(text)
