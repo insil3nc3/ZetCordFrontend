@@ -10,7 +10,7 @@ class DialogItem(QWidget):
     def __init__(self, username, last_msg=None, avatar_path=None, chat_id=None, user_id=None):
         super().__init__()
         self.full_username = username if username else "Unknown"
-        self.last_msg_text = last_msg if last_msg else "Нет сообщений"
+        self.last_msg_text = last_msg
         self.compact_mode = False
 
         font = load_custom_font(12)
@@ -19,7 +19,7 @@ class DialogItem(QWidget):
 
         # ========== Layout setup ==========
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(8, 8, 8, 8)
+        self.layout.setContentsMargins(5, 5, 5, 5)
         self.setStyleSheet("background: transparent;")
         # ==============================
 
@@ -27,7 +27,7 @@ class DialogItem(QWidget):
         self.avatar = QLabel()
         selected_path = avatar_path if avatar_path else default_ava_path
         pixmap = QPixmap(selected_path)
-        circular_pixmap = create_circular_pixmap(pixmap, 55)
+        circular_pixmap = create_circular_pixmap(pixmap, 45)
         self.avatar.setPixmap(circular_pixmap)
         self.avatar.setStyleSheet("background: transparent;")
         self.layout.addWidget(self.avatar)
@@ -38,7 +38,6 @@ class DialogItem(QWidget):
         # ==============================
 
         # ========== Name label ==========
-        self.label_layout.addStretch()
         self.name_label = QLabel(self.full_username)
         self.name_label.setFont(QFont("Inter", 10, QFont.Weight.Normal))
         self.name_label.setStyleSheet("color: white; font-weight: bold; background: transparent;")
@@ -46,8 +45,14 @@ class DialogItem(QWidget):
         # ==============================
 
         # ========== Last message label ==========
-
-        self.last_msg_label = QLabel(self.last_msg_text)
+        if self.last_msg_text:
+            if len(self.last_msg_text) <= 20:
+                msg_text = self.last_msg_text
+            else:
+                msg_text = self.last_msg_text[:20] + "..."
+        else:
+            msg_text = ""
+        self.last_msg_label = QLabel(msg_text)
         self.last_msg_label.setStyleSheet("color: gray; background: transparent;")
         self.last_msg_label.setFont(QFont("Inter", 10, QFont.Weight.Normal))
         self.label_layout.addWidget(self.last_msg_label)
@@ -61,6 +66,7 @@ class DialogItem(QWidget):
         self.username = username
         self.chat_id = chat_id
         self.user_id = user_id
+        self.ava = selected_path
         # ==============================
 
     def set_compact_mode(self, compact):
@@ -77,6 +83,8 @@ class DialogItem(QWidget):
             self.last_msg_label.setVisible(True)
         # ==============================
 
+    def update_last_message(self, text):
+        self.last_msg_label.setText(text)
 
     def set_selected_style(self):
         self.setStyleSheet("""
