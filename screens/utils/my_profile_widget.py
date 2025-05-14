@@ -1,11 +1,12 @@
 import asyncio
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QPainterPath, QLinearGradient, QColor
 from PyQt6.QtWidgets import QWidget, QLabel
 
 from api.profile_actions import get_current_user, download_avatar
 from screens.utils.circular_photo import create_circular_pixmap
 from screens.utils.default_avatar import default_ava_path
+from screens.utils.screen_style_sheet import load_custom_font
 
 
 class MyProfile(QWidget):
@@ -16,16 +17,13 @@ class MyProfile(QWidget):
         self.setFixedHeight(90)
         self.setFixedWidth(300)
 
+        # ====== загрузка шрифта ======
+        font = load_custom_font(12)
+        if font:
+            self.setFont(font)
+        # ==========================
+
         # Устанавливаем градиентный фон через стиль
-        self.setStyleSheet("""
-            MyProfile {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #6C4AB6, stop:1 #5D3FD3
-                );
-                border-radius: 10px;
-            }
-        """)
 
         # Аватар
         self.avatar = QLabel(self)
@@ -36,38 +34,45 @@ class MyProfile(QWidget):
 
         # Имя пользователя
         self.username = QLabel("Username", self)
+        self.username.setFont(QFont("Inter", 16, QFont.Weight.Bold))
         self.username.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.username.setStyleSheet("background: transparent; color: white;")
-        font = QFont()
-        font.setPointSize(12)
-        self.username.setFont(font)
         self.username.setGeometry(90, 20, 200, 20)  # Позиция: x=90, y=20
 
         # Уникальное имя
         self.unique_name = QLabel("unique_name", self)
+        self.unique_name.setFont(QFont("Inter", 12, QFont.Weight.Bold))
         self.unique_name.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.unique_name.setStyleSheet("background: transparent; color: white;")
-        font = QFont()
-        font.setPointSize(10)
-        self.unique_name.setFont(font)
-        self.unique_name.setGeometry(90, 45, 200, 20)  # Позиция: x=90, y=45
-
-
+        self.unique_name.setStyleSheet("background: transparent; color: gray;")
+        self.unique_name.setGeometry(90, 50, 200, 20)  # Позиция: x=90, y=45
 
     def paintEvent(self, event):
-        """Рисуем градиентный фон вручную для надежности."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Создаем градиент
-        gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0, QColor("#6C4AB6"))
-        gradient.setColorAt(1, QColor("#5D3FD3"))
+        outer_rect = QRectF(self.rect())  # Преобразование к QRectF
+        border_radius = 10
+        border_thickness = 3
 
-        # Рисуем прямоугольник с закругленными углами
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, self.width(), self.height(), 10, 10)
-        painter.fillPath(path, gradient)
+        # Градиент для рамки
+        gradient = QLinearGradient(0, 0, self.width(), self.height())
+        gradient.setColorAt(0, QColor("#4C2A57"))
+        gradient.setColorAt(1, QColor("#7A4165"))
+
+        outer_path = QPainterPath()
+        outer_path.addRoundedRect(outer_rect, border_radius, border_radius)
+
+        inner_rect = outer_rect.adjusted(
+            border_thickness, border_thickness,
+            -border_thickness, -border_thickness
+        )
+        inner_path = QPainterPath()
+        inner_path.addRoundedRect(inner_rect, border_radius - 1, border_radius - 1)
+
+        border_path = outer_path.subtracted(inner_path)
+        painter.fillPath(border_path, gradient)
+        painter.fillPath(inner_path, QColor("#121212"))
+
         painter.end()
 
 
