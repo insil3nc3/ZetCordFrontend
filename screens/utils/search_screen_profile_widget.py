@@ -12,7 +12,7 @@ class SearchScreenProfileWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.setFixedHeight(90)
-        self.setFixedWidth(300)
+        # self.setBaseSize(300, 90)
 
         # ====== загрузка шрифта ======
         font = load_custom_font(12)
@@ -46,7 +46,7 @@ class SearchScreenProfileWidget(QWidget):
         self.username.setGeometry(90, 20, 200, 20)  # Позиция: x=90, y=20
 
         # Уникальное имя
-        self.unique_name = QLabel("unique_name", self)
+        self.unique_name = QLabel("", self)
         self.unique_name.setFont(QFont("Inter", 12, QFont.Weight.Bold))
         self.unique_name.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.unique_name.setStyleSheet("background: transparent; color: gray;")
@@ -91,3 +91,13 @@ class SearchScreenProfileWidget(QWidget):
 
         self.username.setText(data.get("nickname", "Имя"))
         self.unique_name.setText(unique_name)
+
+    def sync_input_data(self, data):
+        self.avatar_path = data["avatar_path"]
+        pixmap = QPixmap(self.avatar_path if self.avatar_path else default_ava_path)
+
+        # Преобразуем изображение в круглое
+        circular_pixmap = create_circular_pixmap(pixmap, 70)
+        self.avatar.setPixmap(circular_pixmap)
+
+        self.username.setText(data.get("nickname", "Имя"))
