@@ -32,6 +32,7 @@ class ChatWidget(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 0, 0)
         layout.setSpacing(0)
+        self.setMinimumWidth(200)
         # ====== загрузка шрифта ======
         font = load_custom_font(12)
         if font:
@@ -163,7 +164,7 @@ class ChatWidget(QWidget):
         message_container = QWidget()
         msg_container_layout = QHBoxLayout(message_container)
         msg_container_layout.setContentsMargins(5, 0 if not new_sender else 10, 5, 0)
-        msg_container_layout.setSpacing(10)
+        msg_container_layout.setSpacing(0)
 
         # Аватарка (только если новый отправитель)
         if new_sender:
@@ -185,6 +186,7 @@ class ChatWidget(QWidget):
         msg_container_layout.addWidget(self.message)
         if not history:
             self.update_last_msg_callback(data["content"])
+            QTimer.singleShot(1, self.scroll_to_bottom)
         self.messages_layout.addWidget(message_container)
 
     def send_message(self):
