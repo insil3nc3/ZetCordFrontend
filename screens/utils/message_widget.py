@@ -26,6 +26,7 @@ class MessageWidget(QWidget):
         main_layout = QHBoxLayout()
         self.setLayout(main_layout)
         self.msg_container = QWidget()
+        self.msg_container.setMinimumHeight(40)
         msg_layout = QHBoxLayout()
         msg_layout.setContentsMargins(10, 6, 10, 6)
         msg_layout.setSpacing(5)
@@ -41,11 +42,14 @@ class MessageWidget(QWidget):
 
         # ========== Msg text ==========
         self.text = QLabel(self.msg_text)
-        self.text.setFont(QFont("Inter", 12, QFont.Weight.Normal))
+        self.text.setFont(QFont("Inter", 11, QFont.Weight.Normal))
         self.text.setWordWrap(True)
         self.text.setMaximumWidth(500)
-        self.text.setStyleSheet("color: #FFFFFF;")
-
+        self.text.setWordWrap(True)
+        self.text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.text.setStyleSheet("""
+            color: white;
+        """)
         msg_layout.addWidget(self.text)
 
         # ==============================
