@@ -2,7 +2,7 @@ import os
 
 import httpx
 from api.auth import refresh_tokens
-from api.common import token_manager, URL
+from api.common import token_manager, URL, timeout
 from pathlib import Path
 
 API_URL = URL + "user"
@@ -11,7 +11,7 @@ async def edit_unique_name(unique_name: str):
     headers = {
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             url=f"{API_URL}/edit_unique_name",
             params={"name": unique_name},
@@ -35,7 +35,7 @@ async def edit_nickname(nickname: str):
     headers = {
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             url=f"{API_URL}/edit_nickname",
             params={"nickname": nickname},
@@ -62,7 +62,7 @@ async def upload_avatar(filepath: str):
 
     with open(filepath, "rb") as f:
         files = {"file": ("avatar.jpg", f, "image/jpeg")}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 url=f"{API_URL}/upload_avatar",
                 headers=headers,
@@ -96,33 +96,38 @@ async def download_avatar(user_profile_id: int) -> str | None:
 
     avatar_path = get_avatar_path(user_profile_id)
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            url=f"{API_URL}/avatar/{user_profile_id}",
-            headers=headers
-        )
-        if response.status_code == 200:
-            with open(avatar_path, "wb") as f:
-                f.write(response.content)
-            return avatar_path
-        elif response.status_code == 401:
-            await refresh_tokens()
-            headers["Authorization"] = f"Bearer {token_manager.get_access_token()}"
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
             response = await client.get(
                 url=f"{API_URL}/avatar/{user_profile_id}",
-                headers=headers
+                headers=headers,
+                timeout=1
             )
             if response.status_code == 200:
                 with open(avatar_path, "wb") as f:
                     f.write(response.content)
                 return avatar_path
-        return None
+            elif response.status_code == 401:
+                await refresh_tokens()
+                headers["Authorization"] = f"Bearer {token_manager.get_access_token()}"
+                response = await client.get(
+                    url=f"{API_URL}/avatar/{user_profile_id}",
+                    headers=headers
+                )
+                if response.status_code == 200:
+                    with open(avatar_path, "wb") as f:
+                        f.write(response.content)
+                    return avatar_path
+            return None
+        except Exception as e:
+            print(f"Ошибка при загрузке аватара: {e}")
+            return None
 
 async def get_current_user():
     headers = {
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.get(url=f"{API_URL}/me", headers=headers)
 
         if response.status_code == 200:
@@ -143,7 +148,7 @@ async def get_user_info(user_id: int):
     headers = {
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.get(url=f"{API_URL}/get_user_info", headers=headers, params={"user_id": user_id})
 
         if response.status_code == 200:
@@ -165,7 +170,7 @@ async def search_user(unique_name: str):
     headers = {
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.get(url=f"{API_URL}/get_user/{unique_name}", headers=headers, params={"user_unique_name": unique_name})
         if response.status_code == 200:
             return response.json()

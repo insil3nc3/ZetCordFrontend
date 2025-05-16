@@ -1,7 +1,7 @@
 import asyncio
 
 import httpx
-from api.common import URL, token_manager
+from api.common import URL, token_manager, timeout
 from api.auth import refresh_tokens
 
 API_URL = URL + "chats"
@@ -12,7 +12,7 @@ async def create_chat(user_unique_name: str):
         "Authorization": f"Bearer {token_manager.get_access_token()}"
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 f"{API_URL}/private",

@@ -1,12 +1,12 @@
 import asyncio
 
 import httpx
-from api.common import token_manager, URL
+from api.common import token_manager, URL, timeout
 
 API_URL = URL+"auth"
 
 async def request_code(email: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(url=f"{API_URL}/request_code", params={"email": email})
             if response.status_code == 200:
@@ -18,7 +18,7 @@ async def request_code(email: str):
             return {"request error": f"error while requesting the code: {e}"}
 
 async def register(email: str, password: str, code: int):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 url=f"{API_URL}/register",
@@ -37,7 +37,7 @@ async def register(email: str, password: str, code: int):
             return {"request error": f"error while requesting the code: {e}"}
 
 async def login(email: str, password: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 url=f"{API_URL}/login",
@@ -61,7 +61,7 @@ async def refresh_tokens():
     if not refresh_token:
         return {"request error": "No refresh token stored"}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 url = f"{API_URL}/refresh",
@@ -88,7 +88,7 @@ async def check_refresh_token_expired():
     refresh_token = token_manager.get_refresh_token()
     if not refresh_token:
         return {"request error": "No refresh token stored"}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.get(
                 url = f"{API_URL}/check_refresh_token",
