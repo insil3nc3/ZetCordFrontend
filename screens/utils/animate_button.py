@@ -17,7 +17,7 @@ class StyledAnimatedButton(QPushButton):
         if self._style == "default":
             self._default_bg = QColor(self.def_color)
             self._hover_bg = QColor("#1c1c1c")        # Фиолетовый
-            self._pressed_bg = QColor("transparent")      # Глубокий фиолетовый
+            self._pressed_bg = QColor("transparent")  # Прозрачный фиолетовый оттенок
 
             self._default_text = QColor("white")
             self._hover_text = QColor("white")
@@ -28,30 +28,30 @@ class StyledAnimatedButton(QPushButton):
             self._pressed_border = QColor("#9B4DCA")
 
         elif self._style == "positive":
-            self._default_bg = QColor("#264d3b")
-            self._hover_bg = QColor("#3c8d40")
-            self._pressed_bg = QColor("#2e7033")
+            self._default_bg = QColor("#3ba55d")  # Основной зелёный — яркий, дружелюбный
+            self._hover_bg = QColor("#2e8a4e")  # Тёмнее при наведении
+            self._pressed_bg = QColor("#247343")  # Ещё темнее при зажатии
 
             self._default_text = QColor("#84e1a0")
             self._hover_text = QColor("#FFFFFF")
             self._pressed_text = QColor("#b2ffcc")
 
-            self._default_border = QColor("#264d3b")
-            self._hover_border = QColor("#3c8d40")
-            self._pressed_border = QColor("#3C8D40")
+            self._default_border = QColor("#3ba55d")
+            self._hover_border = QColor("#2e8a4e")
+            self._pressed_border = QColor("#247343")
 
         elif self._style == "negative":
-            self._default_bg = QColor("#4d2626")
-            self._hover_bg = QColor("#a93226")
-            self._pressed_bg = QColor("#7b1e1e")
+            self._default_bg = QColor("#ed4245")  # Яркий красный
+            self._hover_bg = QColor("#c53b3e")  # Тёмнее при наведении
+            self._pressed_bg = QColor("#a83235")  # Ещё темнее при зажатии
 
             self._default_text = QColor("#ff9999")
             self._hover_text = QColor("#FFFFFF")
             self._pressed_text = QColor("#ffcccc")
 
-            self._default_border = QColor("#4d2626")
-            self._hover_border = QColor("#a93226")
-            self._pressed_border = QColor("#A93226")
+            self._default_border = QColor("#ed4245")
+            self._hover_border = QColor("#c53b3e")
+            self._pressed_border = QColor("#a83235")
 
         else:
             raise ValueError("btn_style должен быть 'default', 'positive' или 'negative'")
@@ -144,3 +144,58 @@ class StyledAnimatedButton(QPushButton):
 
     def edit_text(self, text):
         self.setText(text)
+
+    # Внутри StyledAnimatedButton (или через наследование от него):
+    def update_style(self, new_style):
+        self.apply_style(new_style)
+
+    def apply_style(self, style):
+        self._style = style
+
+        if self._style == "default":
+            self._default_bg = QColor(self.def_color)
+            self._hover_bg = QColor("#1c1c1c")
+            self._pressed_bg = QColor("transparent")
+
+            self._default_text = QColor("white")
+            self._hover_text = QColor("white")
+            self._pressed_text = QColor("white")
+
+            self._default_border = QColor(self.def_color)
+            self._hover_border = QColor("#9B4DCA")
+            self._pressed_border = QColor("#9B4DCA")
+
+        elif self._style == "positive":
+            self._default_bg = QColor("#3ba55d")
+            self._hover_bg = QColor("#2e8a4e")
+            self._pressed_bg = QColor("#247343")
+
+            self._default_text = QColor("#84e1a0")
+            self._hover_text = QColor("#FFFFFF")
+            self._pressed_text = QColor("#b2ffcc")
+
+            self._default_border = QColor("#3ba55d")
+            self._hover_border = QColor("#2e8a4e")
+            self._pressed_border = QColor("#247343")
+
+        elif self._style == "negative":
+            self._default_bg = QColor("#ed4245")
+            self._hover_bg = QColor("#c53b3e")
+            self._pressed_bg = QColor("#a83235")
+
+            self._default_text = QColor("#ff9999")
+            self._hover_text = QColor("#FFFFFF")
+            self._pressed_text = QColor("#ffcccc")
+
+            self._default_border = QColor("#ed4245")
+            self._hover_border = QColor("#c53b3e")
+            self._pressed_border = QColor("#a83235")
+
+        else:
+            raise ValueError("btn_style должен быть 'default', 'positive' или 'negative'")
+
+        # Обновляем текущие значения
+        self._bg_color = self._default_bg
+        self._text_color = self._default_text
+        self._border_color = self._default_border
+
