@@ -46,10 +46,10 @@ class DialogItem(QWidget):
 
         # ========== Last message label ==========
         if self.last_msg_text:
-            if len(self.last_msg_text) <= 20:
-                msg_text = self.last_msg_text
+            if len(self.last_msg_text) <= 18:
+                msg_text = self.last_msg_text.replace("\n", " ")
             else:
-                msg_text = self.last_msg_text[:20] + "..."
+                msg_text = self.last_msg_text[:18].replace("\n", " ") + "..."
         else:
             msg_text = ""
         self.last_msg_label = QLabel(msg_text)
@@ -84,7 +84,14 @@ class DialogItem(QWidget):
         # ==============================
 
     def update_last_message(self, text):
-        self.last_msg_label.setText(text)
+        if text:
+            if len(text) <= 18:
+                msg_text = text.replace("\n", " ")
+            else:
+                msg_text = text[:18].replace("\n", " ") + "..."
+        else:
+            msg_text = ""
+        self.last_msg_label.setText(msg_text)
 
     def set_selected_style(self):
         self.setStyleSheet("""
