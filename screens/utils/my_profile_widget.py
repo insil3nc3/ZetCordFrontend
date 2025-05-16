@@ -12,7 +12,7 @@ from screens.utils.screen_style_sheet import load_custom_font
 class MyProfile(QWidget):
     def __init__(self):
         super().__init__()
-
+        self.avatar_path = None
 
         self.setFixedHeight(90)
         self.setFixedWidth(300)
@@ -81,8 +81,8 @@ class MyProfile(QWidget):
         full_data = data
         profile_data = full_data.get("profile_data", {})
 
-        avatar_path = await download_avatar(profile_data.get("id"))
-        pixmap = QPixmap(avatar_path if avatar_path else default_ava_path)
+        self.avatar_path = await download_avatar(profile_data.get("id"))
+        pixmap = QPixmap(self.avatar_path if self.avatar_path else default_ava_path)
 
         # Преобразуем изображение в круглое
         circular_pixmap = create_circular_pixmap(pixmap, 70)
