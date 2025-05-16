@@ -1,7 +1,10 @@
 import os
+from sys import exception
+
 from PyQt6.QtWidgets import QWidget, QMainWindow
 from PyQt6.QtCore import QTimer, pyqtSlot
 from PyQt6.QtGui import QFont, QFontDatabase
+from jaraco.functools import except_
 
 from screens.utils.screen_style_sheet import screen_style, load_custom_font
 from screens.utils.widgets import line_edit_style, button_style, line_edit_style_alert, code_confirm_style_sheet, nickname_style_sheet
@@ -84,8 +87,12 @@ class RegistrateWindow(QMainWindow):
 
     def to_open(self):
         self.close()
-        self.main_window = MainWindow()
-        self.main_window.showFullScreen()
+        try:
+            self.main_window = MainWindow()
+            self.main_window.showFullScreen()
+        except exception as e:
+            print(e)
+
 
     @pyqtSlot()
     async def open_main_menu(self):
