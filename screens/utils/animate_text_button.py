@@ -4,16 +4,27 @@ from PyQt6.QtGui import QColor, QCursor, QFont
 
 
 class AnimatedButton(QPushButton):
-    def __init__(self, text="", parent=None):
+    def __init__(
+        self,
+        text="",
+        parent=None,
+        font_size=14,
+        underline=True,
+        color="gray",
+        hover_color="#9B4DCA",
+        pressed_color="#4C2A57"
+    ):
         super().__init__(text, parent)
-        self._color = QColor("gray")
-        self._hover_color = QColor("#9B4DCA")
-        self._pressed_color = QColor("#2C1D6A")
-        self._default_color = QColor("gray")
+        self.font_size = font_size
+        self.underline = underline
 
-        self.setStyleSheet("text-decoration: underline; background-color: transparent; border: none;")
+        self._default_color = QColor(color)
+        self._hover_color = QColor(hover_color)
+        self._pressed_color = QColor(pressed_color)
+        self._color = self._default_color
+
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setFont(QFont('Inter', 14, QFont.Weight.ExtraBold))
+        self.setFont(QFont('Inter', self.font_size, QFont.Weight.ExtraBold))
         self.setFixedWidth(250)
 
         self._animation = QPropertyAnimation(self, b"textColor", self)
@@ -35,7 +46,6 @@ class AnimatedButton(QPushButton):
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        # Проверим, находится ли курсор всё ещё над кнопкой
         if self.rect().contains(event.pos()):
             self._start_animation(self._hover_color)
         else:
@@ -54,9 +64,10 @@ class AnimatedButton(QPushButton):
     def set_text_color(self, color):
         if isinstance(color, QColor):
             self._color = color
+            text_decoration = "underline" if self.underline else "none"
             self.setStyleSheet(f"""
                 color: {color.name()};
-                text-decoration: underline;
+                text-decoration: {text_decoration};
                 background-color: transparent;
                 border: none;
             """)
