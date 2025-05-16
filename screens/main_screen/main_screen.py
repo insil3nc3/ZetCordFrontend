@@ -1,16 +1,21 @@
 import asyncio
 import json
-
+import os
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QListWidget, QHBoxLayout, QPushButton, QListWidgetItem, QWidget, \
     QApplication, QSizePolicy
 from PyQt6.QtCore import pyqtSlot, Qt, QEvent, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPalette, QColor, QCursor
+from qasync import asyncSlot
+
+from backend.audio_manager import AudioManager
+from screens.main_screen.call_widget import CallWidget
 from screens.main_screen.search_user import UserSearchWidget
 from api.profile_actions import get_user_info, download_avatar
 from api.common import token_manager
 from screens.main_screen.chat_widget import ChatWidget
 from screens.main_screen.dialog_item_widget import DialogItem
 from screens.utils.animate_button import StyledAnimatedButton
+from screens.utils.incoming_call_widget import IncomingCallWidget
 from screens.utils.my_profile_widget import MyProfile
 from screens.main_screen.web_socket import WebSocketClient
 from screens.utils.screen_style_sheet import screen_style, load_custom_font
@@ -26,6 +31,11 @@ class MainWindow(QMainWindow):
         self.user_start_data = None
         self.cur_chat_id = None
         self.active_list = 'dialogs'
+        self.call_widget = None
+        self.call = False
+        self.cur_user_avatar_path = None
+        self.incoming_call = None
+        self.audio = AudioManager()
         # =========================================
 
         self.showMaximized()
@@ -64,6 +74,7 @@ class MainWindow(QMainWindow):
         chats_with_profile_layout.setContentsMargins(0, 10, 0, 0)  # Отступ сверху
 
         self.profile_widget = MyProfile()
+        self.cur_user_avatar_path = self.profile_widget.avatar_path
         self.profile_widget.setFixedWidth(300)
         chats_with_profile_layout.addWidget(self.profile_widget)
 
@@ -83,7 +94,6 @@ class MainWindow(QMainWindow):
         groups_layout.setSpacing(0)
         groups_and_dialogs_layout.addLayout(groups_layout)
 
-        # Кнопка "Найти..." с аналогичными настройками
         self.search_group = StyledAnimatedButton(
             text="Найти...",
             font_size=14,
@@ -120,7 +130,7 @@ class MainWindow(QMainWindow):
         # Bottom container with "+" button
         self.bottom_group_container = QWidget()
         bottom_group_layout = QHBoxLayout()
-        bottom_group_layout.setContentsMargins(0, 10, 0, 10)  # Отступы сверху и снизу для кнопки
+        bottom_group_layout.setContentsMargins(0, 10, 0, 10)
         bottom_group_layout.setSpacing(10)
         bottom_group_layout.addStretch()
         bottom_group_layout.addWidget(self.create_group)
@@ -272,8 +282,9 @@ class MainWindow(QMainWindow):
         self.dialogs_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         # =============================
 
-        self.other_layout = QVBoxLayout()
-        main_layout.addLayout(self.other_layout, 1)
+        self.call_layout = QVBoxLayout()
+
+        main_layout.addLayout(self.call_layout, 1)
 
     def set_active_list(self, list_name):
         if list_name == self.active_list:
@@ -445,6 +456,7 @@ class MainWindow(QMainWindow):
                 }    
                 """)
 
+
     @pyqtSlot()
     def on_groups_list_clicked(self):
         self.set_active_list('groups')
@@ -470,23 +482,32 @@ class MainWindow(QMainWindow):
         search_user_widget = UserSearchWidget(self.open_chat, self.insert_item_to_dialog_list, self.focus_to_widget, parent=self, cur_user=self.user_start_data['profile_data']["id"])
         search_user_widget.show()
 
-    @pyqtSlot(str)
-    def handle_ws_message(self, message: str):
+    @asyncSlot(str)
+    async def handle_ws_message(self, message: str):
         try:
             data = json.loads(message)
             if data["type"] == "init":
                 del data["type"]
+                print("MainWindow: init data get")
                 self.user_start_data = data
-                asyncio.create_task(self.fill_dialog_list())
-                asyncio.create_task(self.profile_widget.input_data(self.user_start_data))
+                await self.fill_dialog_list()
+                await self.profile_widget.input_data(self.user_start_data)
             elif data["type"] == "chat_message":
                 if data["chat_id"] == self.cur_chat_id:
                     if self.chat_widget:
                         self.chat_widget.add_message(data["message"])
             elif data["type"] == "chat_history":
+                print("получено история:", data["type"])
                 if data["chat_id"] == self.cur_chat_id:
                     if self.chat_widget:
                         self.chat_widget.show_history(data["messages"])
+            elif data["type"] == "offer":
+                if not self.incoming_call:
+                    self.incoming_call = IncomingCallWidget(data["from"], self.audio)
+                    self.incoming_call.show()
+            elif data["type"] == "answer":
+                if self.call_widget:
+                    self.call_widget.init_call(data)
         except json.JSONDecodeError as e:
             print("ошибка при получении вебсокет сообщения:", e)
 
@@ -512,9 +533,29 @@ class MainWindow(QMainWindow):
             chat_id = self.cur_widget.chat_id
             self.cur_chat_id = self.cur_widget.chat_id
             self.open_chat(chat_id, self.cur_widget.user_id, self.cur_widget.username)
+            self.open_call_menu(self.cur_widget.user_id, self.cur_widget.username, self.cur_widget.ava, "ababa")
         except AttributeError:
             # print("Ошибка: Атрибут chat_id не найден в виджете")
             return
+
+    def open_call_menu(self, receiver_id, receiver_name, receiver_avatar_path, users_data):
+        if self.call_widget:
+            if self.call:
+                return
+            else:
+                self.call_widget.deleteLater()
+
+        self.call_widget = CallWidget(
+            receiver_id=receiver_id,
+            receiver_name=receiver_name,
+            receiver_avatar_path=receiver_avatar_path,
+            cur_user_info=self.user_start_data["profile_data"],
+            audio=self.audio,
+            set_calling_status_callback=self.set_calling_status,
+            send_via_ws=self.send_via_ws
+        )
+        self.call_layout.addWidget(self.call_widget)
+
 
     def open_chat(self, chat_id, receiver_id, username):
         self.cur_chat_id = chat_id
@@ -548,6 +589,7 @@ class MainWindow(QMainWindow):
             else:
                 self.user2_id = dialog.get("user1_id")
             user2 = await get_user_info(self.user2_id)
+            print("скачиваю аватарки...")
             avatar_path = await download_avatar(self.user2_id)
             self.widget = self.insert_item_to_dialog_list(
                 username=user2.get("nickname"),
@@ -590,4 +632,11 @@ class MainWindow(QMainWindow):
         if index != -1:
             self.dialogs_list.setCurrentRow(index)
             item = self.dialogs_list.item(index)
-            widget = self.dialogs_list.itemWidget(item)
+            self.cur_widget = self.dialogs_list.itemWidget(item)
+
+    def set_calling_status(self, calling):
+        if calling:
+            self.call = True
+        else:
+            self.call = False
+
