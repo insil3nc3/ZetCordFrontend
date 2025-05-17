@@ -8,7 +8,7 @@ from av import AudioFrame
 class MicrophoneStreamTrack(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, device=0, sample_rate=48000, chunk=960):
+    def __init__(self, device=0, sample_rate=48000, chunk=960, channels=None):
         super().__init__()
         self.sample_rate = sample_rate
         self.chunk = chunk
@@ -29,7 +29,7 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         if input_channels < 1:
             raise RuntimeError(f"Устройство {devices[device]['name']} не поддерживает входной звук")
 
-        self.channels = min(2, input_channels)  # выбираем максимум 2 канала
+        self.channels = channels if channels else min(2, input_channels)
         print(f"Используется устройство: {devices[device]['name']} (индекс {device}), channels={self.channels}")
 
         try:
@@ -50,14 +50,14 @@ class MicrophoneStreamTrack(MediaStreamTrack):
     def _callback(self, indata, frames, time_info, status):
         if not self._running:
             return
-        if status:
-            print(f"⚠ Audio input status: {status}")
+        print(f"🎤 callback: indata.shape={indata.shape}, frames={frames}, status={status}")
         self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
         if not self._running:
             raise RuntimeError("Микрофонный поток остановлен")
         data = await self.buffer.get()
+        print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}")
 
         frame = AudioFrame.from_ndarray(
             data.T if data.ndim > 1 else data.reshape(-1, 1),

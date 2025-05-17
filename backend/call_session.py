@@ -1,5 +1,6 @@
 import asyncio
 import numpy as np
+import sounddevice as sd
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
 from backend.microphone_stream import MicrophoneStreamTrack
 
@@ -17,10 +18,23 @@ class CallSession:
     def _initialize(self):
         try:
             self.pc = RTCPeerConnection()
-            self.microphone = MicrophoneStreamTrack(device=self.audio_device)
+            devices = sd.query_devices()
+            if self.audio_device is None:
+                for i, dev in enumerate(devices):
+                    if dev["max_input_channels"] >= 1:
+                        self.audio_device = i
+                        break
+                else:
+                    raise ValueError("Не найдено устройство ввода")
+            print(f"Выбрано устройство ввода: {devices[self.audio_device]['name']} (индекс {self.audio_device})")
+            device_info = sd.query_devices(self.audio_device)
+            channels = min(2, device_info['max_input_channels'])
+            self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
+
             self.pc.addTrack(self.microphone)
             self.pc.on("icecandidate", self.on_icecandidate)
-            self.pc.on("track", self.on_track)
+            self.pc.on("track", self._handle_track)
+
             self.pc.on("connectionstatechange", self.on_connectionstatechange)
             self.pc.on("datachannel", lambda event: print(f"Получен DataChannel: {event.channel.label}"))
             self.pc.on("iceconnectionstatechange", lambda: print(f"ICE connection state: {self.pc.iceConnectionState}"))
@@ -30,38 +44,44 @@ class CallSession:
             print(f"Ошибка при инициализации CallSession: {e}")
             asyncio.create_task(self.cleanup())
 
-    async def on_track(self, track):
+    def _handle_track(self, track):
         print(f"Получен трек: {track.kind}, id={track.id}")
         if track.kind == "audio":
             self.remote_track = track
             self.call_active = True
-            try:
-                self.audio_manager.start_output_stream()
-                while self.call_active and self.pc and self.pc.connectionState == "connected":
-                    try:
-                        print("Ожидание AudioFrame...")
-                        frame = await track.recv()
-                        print(f"Получен AudioFrame: samples={frame.samples}, sample_rate={frame.sample_rate}, format={frame.format}, layout={frame.layout}")
-                        audio_data = frame.to_ndarray(format="flt")
-                        print(f"Получены аудиоданные: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}")
-                        if audio_data.ndim == 1:
-                            audio_data = np.repeat(audio_data.reshape(-1, 1), 2, axis=1)
-                        elif audio_data.shape[1] == 1:
-                            audio_data = np.repeat(audio_data, 2, axis=1)
-                        max_amplitude = np.max(np.abs(audio_data))
-                        if max_amplitude > 1.0:
-                            audio_data = audio_data / max_amplitude
-                            print(f"Нормализация выполнена: новый max={np.max(np.abs(audio_data))}")
-                        self.audio_manager.play_audio_chunk(audio_data)
-                    except Exception as e:
-                        print(f"Ошибка при получении AudioFrame: {e}")
-                        continue
-            except Exception as e:
-                print(f"Критическая ошибка в on_track: {e}")
-            finally:
-                print("Завершение обработки трека")
-                if self.call_active:
-                    self.call_active = False  # Предотвратить повторный cleanup
+            asyncio.create_task(self._receive_audio(track))  # ✅ запускаем асинхронно в фоне
+
+    async def _receive_audio(self, track):
+        try:
+            self.audio_manager.start_output_stream()
+            print("🔁 Начат приём аудиофреймов")
+
+            # 🔒 Ждём, пока соединение реально установится
+            while self.pc.connectionState != "connected":
+                print(f"⏳ Ожидание соединения... (текущее: {self.pc.connectionState})")
+                await asyncio.sleep(0.1)
+
+            while self.call_active and self.pc and self.pc.connectionState == "connected":
+                try:
+                    frame = await track.recv()
+                    audio_data = frame.to_ndarray(format="flt")
+                    print(f"🎧 Получен фрейм: shape={audio_data.shape}, max={np.max(np.abs(audio_data))}")
+
+                    # Приведение к stereo, если нужно
+                    if audio_data.ndim == 1:
+                        audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
+                    elif audio_data.shape[1] == 1:
+                        audio_data = np.repeat(audio_data, 2, axis=1)
+
+                    self.audio_manager.play_audio_chunk(audio_data)
+                except Exception as e:
+                    print(f"❌ Ошибка при приёме аудио: {e}")
+                    await asyncio.sleep(0.05)  # ⏳ Задержка, чтобы не зациклиться
+        except Exception as e:
+            print(f"❌ Ошибка в _receive_audio: {e}")
+        finally:
+            print("🛑 Завершена обработка аудиотрека")
+            self.call_active = False
 
     async def cleanup(self):
         print(f"Cleanup вызван, call_active={self.call_active}")
