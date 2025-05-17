@@ -8,10 +8,9 @@ from av import AudioFrame
 class MicrophoneStreamTrack(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, device=0, sample_rate=48000, channels=1, chunk=960):
+    def __init__(self, device=0, sample_rate=48000, chunk=960):
         super().__init__()
         self.sample_rate = sample_rate
-        self.channels = channels
         self.chunk = chunk
         self.buffer = asyncio.Queue()
         self._timestamp = 0
@@ -22,11 +21,16 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         for i, dev in enumerate(devices):
             print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
-        if device is None:
+        if device is None or device >= len(devices):
+            print("⚠ Указано недопустимое устройство. Используется устройство по умолчанию (индекс 0)")
             device = 0
-            print(f"Используется устройство fifine   Microphone: USB Audio (индекс 0)")
-        else:
-            print(f"Используется устройство: {devices[device]['name']} (индекс {device})")
+
+        input_channels = devices[device]['max_input_channels']
+        if input_channels < 1:
+            raise RuntimeError(f"Устройство {devices[device]['name']} не поддерживает входной звук")
+
+        self.channels = min(2, input_channels)  # выбираем максимум 2 канала
+        print(f"Используется устройство: {devices[device]['name']} (индекс {device}), channels={self.channels}")
 
         try:
             self.stream = sd.InputStream(
@@ -38,29 +42,27 @@ class MicrophoneStreamTrack(MediaStreamTrack):
                 callback=self._callback,
             )
             self.stream.start()
-            print("Микрофонный поток запущен")
+            print("✅ Микрофонный поток запущен")
         except Exception as e:
-            print(f"Ошибка при запуске микрофонного потока: {e}")
+            print(f"❌ Ошибка при запуске микрофонного потока: {e}")
             raise
 
     def _callback(self, indata, frames, time_info, status):
         if not self._running:
             return
         if status:
-            print(f"Audio input status: {status}")
-        print(f"Микрофонные данные: shape={indata.shape}, dtype={indata.dtype}, max={np.max(np.abs(indata))}")
+            print(f"⚠ Audio input status: {status}")
         self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
         if not self._running:
             raise RuntimeError("Микрофонный поток остановлен")
         data = await self.buffer.get()
-        print(f"Отправка аудиоданных: shape={data.shape}, dtype={data.dtype}, max={np.max(np.abs(data))}")
 
         frame = AudioFrame.from_ndarray(
             data.T if data.ndim > 1 else data.reshape(-1, 1),
             format='flt',
-            layout='mono'
+            layout='mono' if self.channels == 1 else 'stereo'
         )
         frame.pts = self._timestamp
         frame.sample_rate = self.sample_rate
@@ -73,4 +75,4 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         if hasattr(self, 'stream') and self.stream:
             self.stream.stop()
             self.stream.close()
-            print("Микрофонный поток остановлен")
+            print("🛑 Микрофонный поток остановлен")
