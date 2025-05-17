@@ -85,7 +85,7 @@ async def upload_avatar(filepath: str):
             return {"error": response.text}
 
 def get_avatar_path(user_profile_id: int):
-    cache_dir = os.path.join("..", "avatar")
+    cache_dir = "avatar"
     avatar_path = os.path.join(cache_dir ,f"{user_profile_id}.jpg")
     return avatar_path
 
