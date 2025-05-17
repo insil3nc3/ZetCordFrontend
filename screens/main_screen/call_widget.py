@@ -164,6 +164,7 @@ class CallWidget(QWidget):
             }
         }
         self.send_via_ws(data)
+        self.call_session.call_active = True
 
     async def on_ice_candidate_received(self, candidate):
         if self.call_session and self.call_session.pc:
