@@ -5,11 +5,10 @@ import sounddevice as sd
 from aiortc import MediaStreamTrack
 from av import AudioFrame
 
-
 class MicrophoneStreamTrack(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, device=0, sample_rate=48000, channels=1, chunk=960):  # Указываем индекс 0 по умолчанию
+    def __init__(self, device=0, sample_rate=48000, channels=1, chunk=960):
         super().__init__()
         self.sample_rate = sample_rate
         self.channels = channels
@@ -18,13 +17,11 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         self._timestamp = 0
         self._running = True
 
-        # Получаем список устройств и выводим их
         devices = sd.query_devices()
         print("Доступные аудиоустройства:")
         for i, dev in enumerate(devices):
             print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
-        # Если устройство не указано, используем fifine Microphone (индекс 0)
         if device is None:
             device = 0
             print(f"Используется устройство fifine Microphone: USB Audio (индекс 0)")
@@ -55,6 +52,8 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
+        if not self._running:
+            raise RuntimeError("Микрофонный поток остановлен")
         data = await self.buffer.get()
         print(f"Отправка аудиоданных: shape={data.shape}, dtype={data.dtype}, max={np.max(np.abs(data))}")
 
