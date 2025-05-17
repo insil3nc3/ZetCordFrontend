@@ -24,7 +24,7 @@ class MicrophoneStreamTrack(MediaStreamTrack):
 
         if device is None:
             device = 0
-            print(f"Используется устройство fifine Microphone: USB Audio (индекс 0)")
+            print(f"Используется устройство fifine   Microphone: USB Audio (индекс 0)")
         else:
             print(f"Используется устройство: {devices[device]['name']} (индекс {device})")
 

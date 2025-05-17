@@ -2,6 +2,7 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl
 import sounddevice as sd
 import numpy as np
+import platform
 
 
 class AudioManager:
@@ -30,11 +31,7 @@ class AudioManager:
                 for i, dev in enumerate(devices):
                     print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
-                # Linux: используем device=5 (hw:2,0)
-                # Windows: используем device=None (по умолчанию)
-                import platform
                 device = 5 if platform.system() == "Linux" else None
-
                 sd.default.device = device
                 sd.default.samplerate = self.output_sample_rate
                 sd.default.channels = self.output_channels
@@ -52,6 +49,7 @@ class AudioManager:
                 print(f"Аудиовыходной поток запущен на устройстве: {device_name}")
             except Exception as e:
                 print(f"Ошибка при запуске аудиовыходного потока: {e}")
+                self.stop_output_stream()
 
     def play_audio_chunk(self, audio_chunk: np.ndarray):
         if self.output_stream:
@@ -65,42 +63,76 @@ class AudioManager:
                 print(f"Ошибка при воспроизведении аудио: {e}")
 
     def play_ringtone(self, path: str, loop: bool = True):
-        self.ringtone_player.setSource(QUrl.fromLocalFile(path))
-        self.ringtone_output.setVolume(0.8)
-        self.ringtone_player.setLoops(-1 if loop else 1)
-        self.ringtone_player.play()
+        try:
+            self.ringtone_player.setSource(QUrl.fromLocalFile(path))
+            self.ringtone_output.setVolume(0.8)
+            self.ringtone_player.setLoops(-1 if loop else 1)
+            self.ringtone_player.play()
+            print(f"Воспроизведение рингтона: {path}")
+        except Exception as e:
+            print(f"Ошибка при воспроизведении рингтона: {e}")
 
     def stop_ringtone(self):
-        self.ringtone_player.stop()
+        try:
+            self.ringtone_player.stop()
+            print("Рингтон остановлен")
+        except Exception as e:
+            print(f"Ошибка при остановке рингтона: {e}")
 
     def play_notification(self, path: str):
-        self.notification_player.setSource(QUrl.fromLocalFile(path))
-        self.notification_output.setVolume(0.6)
-        self.notification_player.play()
+        try:
+            self.notification_player.setSource(QUrl.fromLocalFile(path))
+            self.notification_output.setVolume(0.6)
+            self.notification_player.play()
+            print(f"Воспроизведение уведомления: {path}")
+        except Exception as e:
+            print(f"Ошибка при воспроизведении уведомления: {e}")
 
     def play_remote_audio(self, path: str):
-        self.remote_audio_player.setSource(QUrl.fromLocalFile(path))
-        self.remote_audio_output.setVolume(1.0)
-        self.remote_audio_player.play()
+        try:
+            self.remote_audio_player.setSource(QUrl.fromLocalFile(path))
+            self.remote_audio_output.setVolume(1.0)
+            self.remote_audio_player.play()
+            print(f"Воспроизведение удаленного аудио: {path}")
+        except Exception as e:
+            print(f"Ошибка при воспроизведении удаленного аудио: {e}")
 
     def start_microphone_stream(self, callback):
-        self.input_stream = sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            blocksize=self.chunk_size,
-            callback=callback,
-        )
-        self.input_stream.start()
+        try:
+            devices = sd.query_devices()
+            device = 0
+            sd.default.device = device
+            self.input_stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                blocksize=self.chunk_size,
+                callback=callback,
+                device=device
+            )
+            self.input_stream.start()
+            print(f"Микрофонный поток запущен (AudioManager): {devices[device]['name']}")
+        except Exception as e:
+            print(f"Ошибка при запуске микрофонного потока (AudioManager): {e}")
+            self.stop_microphone_stream()
 
     def stop_microphone_stream(self):
         if self.input_stream:
-            self.input_stream.stop()
-            self.input_stream.close()
-            self.input_stream = None
+            try:
+                self.input_stream.stop()
+                self.input_stream.close()
+                print("Микрофонный поток остановлен (AudioManager)")
+            except Exception as e:
+                print(f"Ошибка при остановке микрофонного потока (AudioManager): {e}")
+            finally:
+                self.input_stream = None
 
     def stop_output_stream(self):
         if self.output_stream:
-            self.output_stream.stop()
-            self.output_stream.close()
-            self.output_stream = None
-            print("Аудиовыходной поток остановлен")
+            try:
+                self.output_stream.stop()
+                self.output_stream.close()
+                print("Аудиовыходной поток остановлен")
+            except Exception as e:
+                print(f"Ошибка при остановке аудиовыходного потока: {e}")
+            finally:
+                self.output_stream = None

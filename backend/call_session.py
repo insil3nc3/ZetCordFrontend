@@ -5,7 +5,7 @@ from backend.microphone_stream import MicrophoneStreamTrack
 
 class CallSession:
     def __init__(self, send_ice_callback, audio_manager, audio_device=None):
-        self.pc = RTCPeerConnection()
+        self.pc = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
         self.audio_device = audio_device
@@ -15,31 +15,35 @@ class CallSession:
         self._initialize()
 
     def _initialize(self):
-        self.microphone = MicrophoneStreamTrack(device=self.audio_device)
-        self.pc.addTrack(self.microphone)
-        self.pc.on("icecandidate", self.on_icecandidate)
-        self.pc.on("track", self.on_track)
-        self.pc.on("connectionstatechange", self.on_connectionstatechange)
-        self.pc.on("datachannel", lambda event: print(f"Получен DataChannel: {event.channel.label}"))
-        self.pc.on("iceconnectionstatechange", lambda: print(f"ICE connection state: {self.pc.iceConnectionState}"))
-        self.pc.on("signalingstatechange", lambda: print(f"Signaling state: {self.pc.signalingState}"))
-        print("CallSession инициализирован")
+        try:
+            self.pc = RTCPeerConnection()
+            self.microphone = MicrophoneStreamTrack(device=self.audio_device)
+            self.pc.addTrack(self.microphone)
+            self.pc.on("icecandidate", self.on_icecandidate)
+            self.pc.on("track", self.on_track)
+            self.pc.on("connectionstatechange", self.on_connectionstatechange)
+            self.pc.on("datachannel", lambda event: print(f"Получен DataChannel: {event.channel.label}"))
+            self.pc.on("iceconnectionstatechange", lambda: print(f"ICE connection state: {self.pc.iceConnectionState}"))
+            self.pc.on("signalingstatechange", lambda: print(f"Signaling state: {self.pc.signalingState}"))
+            print("CallSession инициализирован")
+        except Exception as e:
+            print(f"Ошибка при инициализации CallSession: {e}")
+            self.cleanup()
 
     async def on_track(self, track):
         print(f"Получен трек: {track.kind}, id={track.id}, enabled={track.enabled}")
         if track.kind == "audio":
             self.remote_track = track
-            self.call_active = True  # Устанавливаем явно
+            self.call_active = True
             self.audio_manager.start_output_stream()
             try:
-                while self.call_active and self.pc.connectionState == "connected":
+                while self.call_active and self.pc and self.pc.connectionState == "connected":
                     try:
                         print("Ожидание AudioFrame...")
                         frame = await track.recv()
                         print(f"Получен AudioFrame: samples={frame.samples}, sample_rate={frame.sample_rate}, format={frame.format}, layout={frame.layout}")
                         audio_data = frame.to_ndarray(format="flt")
                         print(f"Получены аудиоданные: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}")
-                        # Приведение к стерео
                         if audio_data.ndim == 1:
                             audio_data = np.repeat(audio_data.reshape(-1, 1), 2, axis=1)
                         elif audio_data.shape[1] == 1:
@@ -63,12 +67,18 @@ class CallSession:
         if self.microphone:
             print("Остановка микрофона")
             self.microphone.stop()
+            self.microphone = None
         if self.remote_track:
             print("Остановка удаленного трека")
             self.remote_track.stop()
+            self.remote_track = None
         if self.pc:
             print("Закрытие RTCPeerConnection")
-            await self.pc.close()
+            try:
+                await self.pc.close()
+            except Exception as e:
+                print(f"Ошибка при закрытии RTCPeerConnection: {e}")
+            self.pc = None
         self.audio_manager.stop_output_stream()
         self.call_active = False
         print("Соединение закрыто")
@@ -76,21 +86,14 @@ class CallSession:
     async def close(self):
         print("Вызов CallSession.close")
         self.call_active = False
-        if self.remote_track:
-            print("Остановка удаленного трека")
-            self.remote_track.stop()
-        if self.microphone:
-            print("Остановка микрофона")
-            self.microphone.stop()
-        await self.pc.close()
-        self.audio_manager.stop_output_stream()
-        print("Соединение закрыто")
+        await self.cleanup()
 
     async def on_connectionstatechange(self):
-        print(f"Состояние соединения: {self.pc.connectionState}")
-        if self.pc.connectionState in ["failed", "disconnected", "closed"]:
-            self.call_active = False
-            await self.cleanup()
+        if self.pc:
+            print(f"Состояние соединения: {self.pc.connectionState}")
+            if self.pc.connectionState in ["failed", "disconnected", "closed"]:
+                self.call_active = False
+                await self.cleanup()
 
     async def create_offer(self):
         offer = await self.pc.createOffer()
