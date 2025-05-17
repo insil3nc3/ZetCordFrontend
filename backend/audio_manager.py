@@ -5,26 +5,44 @@ import numpy as np
 
 
 class AudioManager:
-    def __init__(self):
-        # === Звук звонка ===
+    def __init__(self, sample_rate=48000, channels=1):
         self.ringtone_player = QMediaPlayer()
         self.ringtone_output = QAudioOutput()
         self.ringtone_player.setAudioOutput(self.ringtone_output)
-
-        # === Уведомления ===
         self.notification_player = QMediaPlayer()
         self.notification_output = QAudioOutput()
         self.notification_player.setAudioOutput(self.notification_output)
-
-        # === Воспроизведение голоса собеседника ===
         self.remote_audio_player = QMediaPlayer()
         self.remote_audio_output = QAudioOutput()
         self.remote_audio_player.setAudioOutput(self.remote_audio_output)
-
-        # === Запись с микрофона (ввод речи) ===
         self.input_stream = None
-        self.sample_rate = 44100
+        self.sample_rate = sample_rate
         self.chunk_size = 1024
+        self.output_stream = None
+        self.output_sample_rate = sample_rate  # 48000
+        self.output_channels = channels
+
+    def start_output_stream(self):
+        if self.output_stream is None:
+            try:
+                self.output_stream = sd.OutputStream(
+                    samplerate=self.output_sample_rate,
+                    channels=self.output_channels,
+                    blocksize=1024,
+                    dtype='float32'
+                )
+                self.output_stream.start()
+                print("Аудиовыходной поток запущен")
+            except Exception as e:
+                print(f"Ошибка при запуске аудиовыходного потока: {e}")
+
+    def play_audio_chunk(self, audio_chunk: np.ndarray):
+        if self.output_stream:
+            try:
+                print(f"Воспроизведение аудио: shape={audio_chunk.shape}, dtype={audio_chunk.dtype}, max={np.max(np.abs(audio_chunk))}")
+                self.output_stream.write(audio_chunk)
+            except Exception as e:
+                print(f"Ошибка при воспроизведении аудио: {e}")
 
     # ───── Звонок ─────
     def play_ringtone(self, path: str, loop: bool = True):
@@ -66,3 +84,28 @@ class AudioManager:
             self.input_stream.stop()
             self.input_stream.close()
             self.input_stream = None
+
+    # def start_output_stream(self):
+    #     if self.output_stream is None:
+    #         self.output_stream = sd.OutputStream(
+    #             samplerate=self.output_sample_rate,
+    #             channels=self.output_channels,
+    #             blocksize=1024,
+    #             dtype='float32'
+    #         )
+    #         self.output_stream.start()
+
+    def stop_output_stream(self):
+        if self.output_stream:
+            self.output_stream.stop()
+            self.output_stream.close()
+            self.output_stream = None
+
+    # def play_audio_chunk(self, audio_chunk: np.ndarray):
+    #     """
+    #     Передавать сюда аудиоданные с WebRTC.
+    #     audio_chunk должен быть ndarray с dtype float32 и shape (samples, channels)
+    #     """
+    #     if self.output_stream:
+    #         self.output_stream.write(audio_chunk)
+
