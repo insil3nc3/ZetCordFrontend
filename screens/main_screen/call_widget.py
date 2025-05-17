@@ -90,7 +90,7 @@ class CallWidget(QWidget):
         self.call_button.setStyleSheet("background-color: #3ba55d; border-radius: 45;")
         self.call_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.call_button.clicked.connect(self.toggle_call_state)
-        self.call_button.setIcon(QIcon("../icons/phone-call.svg"))
+        self.call_button.setIcon(QIcon("icons/phone-call.svg"))
         self.call_button.setIconSize(QSize(70, 70))
         call_layout.addWidget(self.call_button, alignment=Qt.AlignmentFlag.AlignCenter)
         call_layout.addStretch()
@@ -136,10 +136,10 @@ class CallWidget(QWidget):
 
     async def offer_to_call(self):
 
-        self.call_session = CallSession(self.send_ice_callback)
+        self.call_session = CallSession(self.send_ice_callback, self.audio)
 
         # подписываемся на событие ICE кандидатов
-        @self.call_session.pc.on("icecandidate")
+
         async def on_icecandidate(event):
             if event.candidate:
                 data = {
@@ -171,7 +171,7 @@ class CallWidget(QWidget):
             await self.call_session.pc.addIceCandidate(candidate)
 
     def set_cur_user_info(self):
-        data = {"nickname": self.cur_user_info["nickname"], "avatar_path": find_image_path_by_number("../avatar", 1)}
+        data = {"nickname": self.cur_user_info["nickname"], "avatar_path": find_image_path_by_number("avatar", 1)}
         self.cur_user.sync_input_data(data)
 
     def set_receiver_info(self):
@@ -182,25 +182,25 @@ class CallWidget(QWidget):
         if not self.call_active:
             self.call_active = True
             self.call_button.setStyleSheet("background-color: #ed4245; border-radius: 45;")  # меняем стиль на "отбой"
-            self.call_button.setIcon(QIcon("../icons/phone-disconnect.svg"))  # иконка "завершить звонок"
+            self.call_button.setIcon(QIcon("icons/phone-disconnect.svg"))  # иконка "завершить звонок"
             self.call_user()
         else:
             self.call_active = False
             self.call_button.setStyleSheet("background-color: #3ba55d; border-radius: 45;")  # стиль обратно на "позвонить"
-            self.call_button.setIcon(QIcon("../icons/phone-call.svg"))  # иконка "начать звонок"
+            self.call_button.setIcon(QIcon("icons/phone-call.svg"))  # иконка "начать звонок"
             self.end_call()
 
     def call_user(self):
         print(f"Начинается звонок пользователю {self.receiver_name}")
         # тут логика начала звонка
         asyncio.create_task(self.offer_to_call())
-        self.audio.play_ringtone("../sounds/zetcord.mp3")
+        self.audio.play_ringtone("sounds/zetcord.mp3")
         self.set_calling_status(True)
 
     def end_call(self):
         print(f"Звонок с {self.receiver_name} завершён")
         self.audio.stop_ringtone()
-        self.audio.play_notification("../sounds/end_calling.mp3")
+        self.audio.play_notification("sounds/end_calling.mp3")
         self.set_calling_status(False)
         asyncio.create_task(self.call_session.close())
 
@@ -208,5 +208,5 @@ class CallWidget(QWidget):
         print("звонок начался: ", info)
 
     async def on_answer_received(self, sdp):
-        await self.call_session.set_remote_description(sdp, "answer")
+        await self.call_session.set_remote_description(sdp)
 
