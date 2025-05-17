@@ -1,3 +1,5 @@
+import asyncio
+
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont, QPixmap, QCursor, QIcon, QKeyEvent
 from PyQt6.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
@@ -65,7 +67,7 @@ class IncomingCallWidget(QDialog):
         button_layout = QHBoxLayout()
 
         accept_button = QPushButton()
-        accept_button.clicked.connect(self.call_accepted)
+        accept_button.clicked.connect(lambda: asyncio.create_task(self.call_accepted()))
         accept_button.setFixedSize(70, 70)
         accept_button.setStyleSheet("background-color: #3ba55d; border-radius: 35;")
         accept_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -103,7 +105,7 @@ class IncomingCallWidget(QDialog):
     async def call_accepted(self):
         self.ringtone_off()
 
-        self.call_session = CallSession()
+        self.call_session = CallSession(self.send_ice_callback)
 
         # Подписка на ICE кандидатов — обязательно, иначе кандидаты не будут отправляться
         @self.call_session.pc.on("icecandidate")
