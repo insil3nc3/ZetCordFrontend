@@ -458,7 +458,6 @@ class MainWindow(QMainWindow):
                 }    
                 """)
 
-
     @pyqtSlot()
     def on_groups_list_clicked(self):
         self.set_active_list('groups')
@@ -484,8 +483,6 @@ class MainWindow(QMainWindow):
         search_user_widget = UserSearchWidget(self.open_chat, self.insert_item_to_dialog_list, self.focus_to_widget, parent=self, cur_user=self.user_start_data['profile_data']["id"])
         search_user_widget.show()
 
-
-
     @asyncSlot(str)
     async def handle_ws_message(self, message: str):
         try:
@@ -509,10 +506,11 @@ class MainWindow(QMainWindow):
                         self.chat_widget.show_history(data["messages"])
             elif data["type"] == "offer":
                 if not self.incoming_call:
-                    self.incoming_call = IncomingCallWidget(data["from"], self.audio, self.send_via_ws)
+                    self.incoming_call = IncomingCallWidget(data, self.audio, self.send_via_ws, self.call_accept)
                     self.incoming_call.show()
             elif data["type"] == "answer":
                 if self.call_widget and self.call_widget.call_session:
+                    self.call_accept()
                     sdp = data.get("answer")
                     if sdp:
                         await self.call_widget.on_answer_received(sdp)
@@ -526,6 +524,10 @@ class MainWindow(QMainWindow):
 
         except json.JSONDecodeError as e:
             print("ошибка при получении вебсокет сообщения:", e)
+
+    def call_accept(self):
+        if self.call_widget:
+            self.call_widget.audio.stop_ringtone()
 
     def eventFilter(self, obj, event):
         # ========== Обработка кликов по пустой области ==========
@@ -571,7 +573,6 @@ class MainWindow(QMainWindow):
             send_via_ws=self.send_via_ws
         )
         self.call_layout.addWidget(self.call_widget)
-
 
     def open_chat(self, chat_id, receiver_id, username):
         self.cur_chat_id = chat_id
@@ -655,4 +656,3 @@ class MainWindow(QMainWindow):
             self.call = True
         else:
             self.call = False
-
