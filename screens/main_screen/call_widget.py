@@ -3,9 +3,12 @@ import asyncio
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QCursor
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from aiortc import RTCPeerConnection
 from more_itertools.recipes import unique
 
 from backend.avatar_path_getter import find_image_path_by_number
+from backend.call_session import CallSession
+from backend.microphone_stream import MicrophoneStreamTrack
 from screens.utils.animate_button import StyledAnimatedButton
 from screens.utils.animate_text_button import AnimatedButton
 from screens.utils.circular_photo import create_circular_pixmap
@@ -26,6 +29,9 @@ class CallWidget(QWidget):
         self.audio = audio
         self.set_calling_status = set_calling_status_callback
         self.send_via_ws = send_via_ws
+        self.pc = None
+        self.audio_track = None
+        self.call_session = None
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
         main_layout.setContentsMargins(10, 10, 0, 0)
@@ -124,12 +130,45 @@ class CallWidget(QWidget):
         circular_pixmap = create_circular_pixmap(pixmap, 120)
         self.avatar.setPixmap(circular_pixmap)
 
-    def offer_to_call(self):
+    def send_ice_callback(self, data: dict):
+        data["to"] = self.receiver_id
+        self.send_via_ws(data)
+
+    async def offer_to_call(self):
+
+        self.call_session = CallSession(self.send_ice_callback)
+
+        # подписываемся на событие ICE кандидатов
+        @self.call_session.pc.on("icecandidate")
+        async def on_icecandidate(event):
+            if event.candidate:
+                data = {
+                    "type": "ice_candidate",
+                    "to": self.receiver_id,
+                    "candidate": {
+                        "candidate": event.candidate.candidate,
+                        "sdpMid": event.candidate.sdpMid,
+                        "sdpMLineIndex": event.candidate.sdpMLineIndex
+                    }
+                }
+                self.send_via_ws(data)
+
+
+        desc = await self.call_session.create_offer()
         data = {
             "type": "offer",
             "to": self.receiver_id,
+            "offer": {
+                "type": desc.type,
+                "sdp": desc.sdp
+            }
         }
         self.send_via_ws(data)
+
+    async def on_ice_candidate_received(self, candidate):
+        if self.call_session and self.call_session.pc:
+            # добавляем кандидат в RTCPeerConnection
+            await self.call_session.pc.addIceCandidate(candidate)
 
     def set_cur_user_info(self):
         data = {"nickname": self.cur_user_info["nickname"], "avatar_path": find_image_path_by_number("../avatar", 1)}
@@ -154,7 +193,7 @@ class CallWidget(QWidget):
     def call_user(self):
         print(f"Начинается звонок пользователю {self.receiver_name}")
         # тут логика начала звонка
-        self.offer_to_call()
+        asyncio.create_task(self.offer_to_call())
         self.audio.play_ringtone("../sounds/zetcord.mp3")
         self.set_calling_status(True)
 
@@ -163,6 +202,11 @@ class CallWidget(QWidget):
         self.audio.stop_ringtone()
         self.audio.play_notification("../sounds/end_calling.mp3")
         self.set_calling_status(False)
+        asyncio.create_task(self.call_session.close())
 
     def init_call(self, info):
         print("звонок начался: ", info)
+
+    async def on_answer_received(self, sdp):
+        await self.call_session.set_remote_description(sdp, "answer")
+

@@ -2,13 +2,14 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont, QPixmap, QCursor, QIcon, QKeyEvent
 from PyQt6.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
 from backend.avatar_path_getter import find_image_path_by_number
+from backend.call_session import CallSession
 from screens.utils.circular_photo import create_circular_pixmap
 from screens.utils.default_avatar import default_ava_path
 from screens.utils.screen_style_sheet import screen_style, load_custom_font
 
 
 class IncomingCallWidget(QDialog):
-    def __init__(self, data, audio, parent=None):
+    def __init__(self, data, audio, send_via_ws_callback, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Найти пользователя")
         self.setModal(False)
@@ -16,6 +17,8 @@ class IncomingCallWidget(QDialog):
         self.setStyleSheet(screen_style)
         self.calling_user_data = data
         self.audio = audio
+        self.send_via_ws = send_via_ws_callback
+        self.call_session = None
         # ====== загрузка шрифта ======
         font = load_custom_font(12)
         if font:
@@ -93,10 +96,48 @@ class IncomingCallWidget(QDialog):
     def ringtone_off(self):
         self.audio.stop_ringtone()
 
-    def call_accepted(self):
+    def send_ice_callback(self, data: dict):
+        data["to"] = self.calling_user_data["id"]
+        self.send_via_ws(data)
+
+    async def call_accepted(self):
         self.ringtone_off()
-        print("звонок принят")
-        self.accept()
+
+        self.call_session = CallSession()
+
+        # Подписка на ICE кандидатов — обязательно, иначе кандидаты не будут отправляться
+        @self.call_session.pc.on("icecandidate")
+        async def on_icecandidate(event):
+            if event.candidate:
+                data = {
+                    "type": "ice_candidate",
+                    "to": self.calling_user_data["id"],
+                    "candidate": {
+                        "candidate": event.candidate.candidate,
+                        "sdpMid": event.candidate.sdpMid,
+                        "sdpMLineIndex": event.candidate.sdpMLineIndex
+                    }
+                }
+                self.send_via_ws(data)
+
+        offer = self.calling_user_data.get("offer")
+
+        if offer:
+            await self.call_session.set_remote_description(offer["sdp"], offer["type"])
+            answer = await self.call_session.create_answer()
+
+            data = {
+                "type": "answer",
+                "to": self.calling_user_data["id"],
+                "answer": {
+                    "type": answer.type,
+                    "sdp": answer.sdp
+                }
+            }
+            self.send_via_ws(data)
+
+            print("звонок принят")
+            self.accept()
 
     def call_rejected(self):
         self.ringtone_off()

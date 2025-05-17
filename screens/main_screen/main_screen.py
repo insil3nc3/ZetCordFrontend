@@ -5,9 +5,11 @@ from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QListWidget, QHBoxLayout, 
     QApplication, QSizePolicy
 from PyQt6.QtCore import pyqtSlot, Qt, QEvent, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPalette, QColor, QCursor
+from aiortc import RTCSessionDescription, RTCPeerConnection
 from qasync import asyncSlot
 
 from backend.audio_manager import AudioManager
+from backend.call_session import CallSession
 from screens.main_screen.call_widget import CallWidget
 from screens.main_screen.search_user import UserSearchWidget
 from api.profile_actions import get_user_info, download_avatar
@@ -482,10 +484,14 @@ class MainWindow(QMainWindow):
         search_user_widget = UserSearchWidget(self.open_chat, self.insert_item_to_dialog_list, self.focus_to_widget, parent=self, cur_user=self.user_start_data['profile_data']["id"])
         search_user_widget.show()
 
+
+
     @asyncSlot(str)
     async def handle_ws_message(self, message: str):
         try:
+
             data = json.loads(message)
+            print(data["type"])
             if data["type"] == "init":
                 del data["type"]
                 print("MainWindow: init data get")
@@ -503,11 +509,21 @@ class MainWindow(QMainWindow):
                         self.chat_widget.show_history(data["messages"])
             elif data["type"] == "offer":
                 if not self.incoming_call:
-                    self.incoming_call = IncomingCallWidget(data["from"], self.audio)
+                    self.incoming_call = IncomingCallWidget(data["from"], self.audio, self.send_via_ws)
                     self.incoming_call.show()
             elif data["type"] == "answer":
-                if self.call_widget:
-                    self.call_widget.init_call(data)
+                if self.call_widget and self.call_widget.call_session:
+                    sdp = data.get("answer")
+                    if sdp:
+                        await self.call_widget.on_answer_received(sdp)
+            elif data["type"] == "ice_candidate":
+                if self.call_widget and self.call_widget.call_session:
+                    candidate = data.get("candidate")
+                    if candidate:
+                        await self.call_widget.call_session.add_ice_candidate(candidate)
+
+
+
         except json.JSONDecodeError as e:
             print("ошибка при получении вебсокет сообщения:", e)
 
