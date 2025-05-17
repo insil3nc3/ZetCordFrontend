@@ -52,7 +52,7 @@ async def login(email: str, password: str):
             elif response.status_code == 401:
                 return {{"request error": f"Ошибка авторизации: неверный пароль"}}
             else:
-                return {{"request error": f"Ошибка авторизации: {response.status_code}, {response.text}"}}
+                return {"request error": f"Ошибка авторизации: {response.status_code}, {response.text}"}
         except httpx.RequestError as e:
             return {"request error": f"error while requesting the code: {e}"}
 
