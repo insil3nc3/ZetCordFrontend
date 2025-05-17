@@ -11,22 +11,24 @@ from screens.utils.screen_style_sheet import screen_style, load_custom_font
 
 
 class IncomingCallWidget(QDialog):
-    def __init__(self, data, audio, send_via_ws_callback, parent=None):
+    def __init__(self, data, audio, send_via_ws_callback, call_accepted_callback, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Найти пользователя")
         self.setModal(False)
         self.setFixedSize(550, 300)
         self.setStyleSheet(screen_style)
-        self.calling_user_data = data
+        self.calling_user_data = data["from"]
+        self.calling_user_offer = data
         self.audio = audio
         self.send_via_ws = send_via_ws_callback
         self.call_session = None
+        self.call_accepted_callback = call_accepted_callback
         # ====== загрузка шрифта ======
         font = load_custom_font(12)
         if font:
             self.setFont(font)
         # ==========================
-        self.ringtone_on("../sounds/zetcord.mp3")
+        self.ringtone_on("sounds/zetcord.mp3")
 
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
@@ -44,7 +46,7 @@ class IncomingCallWidget(QDialog):
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         avatar.setStyleSheet("background: transparent;")
         # ============================
-        avatar_path = find_image_path_by_number("../avatar", data["id"])
+        avatar_path = find_image_path_by_number("avatar", self.calling_user_data["id"])
         pixmap = QPixmap(avatar_path if avatar_path else default_ava_path)
         # Преобразуем изображение в круглое
         circular_pixmap = create_circular_pixmap(pixmap, 70)
@@ -52,12 +54,12 @@ class IncomingCallWidget(QDialog):
         main_layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignCenter)
         # ============================
 
-        nickname = QLabel(data["nickname"])
+        nickname = QLabel(self.calling_user_data["nickname"])
         nickname.setFont(QFont("Inter", 16, QFont.Weight.Bold))
         nickname.setStyleSheet("color: white;")
         main_layout.addWidget(nickname, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        unique_name = QLabel(data["unique_name"])
+        unique_name = QLabel(self.calling_user_data["unique_name"])
         unique_name.setFont(QFont("Inter", 14, QFont.Weight.Bold))
         unique_name.setStyleSheet("color: gray;")
         main_layout.addWidget(unique_name, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -71,7 +73,7 @@ class IncomingCallWidget(QDialog):
         accept_button.setFixedSize(70, 70)
         accept_button.setStyleSheet("background-color: #3ba55d; border-radius: 35;")
         accept_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        accept_button.setIcon(QIcon("../icons/phone-call.svg"))
+        accept_button.setIcon(QIcon("icons/phone-call.svg"))
         accept_button.setIconSize(QSize(50, 50))
 
         cancel_button = QPushButton()
@@ -79,7 +81,7 @@ class IncomingCallWidget(QDialog):
         cancel_button.setFixedSize(70, 70)
         cancel_button.setStyleSheet("background-color: #ed4245; border-radius: 35;")
         cancel_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        cancel_button.setIcon(QIcon("../icons/phone-disconnect.svg"))
+        cancel_button.setIcon(QIcon("icons/phone-disconnect.svg"))
         cancel_button.setIconSize(QSize(50, 50))
 
         button_layout.addStretch()
@@ -105,10 +107,10 @@ class IncomingCallWidget(QDialog):
     async def call_accepted(self):
         self.ringtone_off()
 
-        self.call_session = CallSession(self.send_ice_callback)
+        self.call_session = CallSession(self.send_ice_callback, self.audio)
 
         # Подписка на ICE кандидатов — обязательно, иначе кандидаты не будут отправляться
-        @self.call_session.pc.on("icecandidate")
+
         async def on_icecandidate(event):
             if event.candidate:
                 data = {
@@ -122,10 +124,11 @@ class IncomingCallWidget(QDialog):
                 }
                 self.send_via_ws(data)
 
-        offer = self.calling_user_data.get("offer")
-
+        offer = self.calling_user_offer.get("offer")
+        print(self.calling_user_data)
         if offer:
-            await self.call_session.set_remote_description(offer["sdp"], offer["type"])
+
+            await self.call_session.set_remote_description(offer)
             answer = await self.call_session.create_answer()
 
             data = {
@@ -137,13 +140,14 @@ class IncomingCallWidget(QDialog):
                 }
             }
             self.send_via_ws(data)
-
+            self.call_accepted_callback()
             print("звонок принят")
             self.accept()
+            self.close()
 
     def call_rejected(self):
         self.ringtone_off()
-        self.audio.play_notification("../sounds/end_calling.mp3")
+        self.audio.play_notification("sounds/end_calling.mp3")
         print("звонок отклонен")
         self.reject()
 
