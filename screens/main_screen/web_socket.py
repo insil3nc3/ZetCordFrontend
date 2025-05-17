@@ -15,7 +15,8 @@ class WebSocketClient(QObject):
         self.socket.errorOccurred.connect(self.on_error)
 
     def connect(self):
-        url = QUrl(f"ws://localhost:8000/ws?token={self.token}")
+        # localhost:8000
+        url = QUrl(f"wss://4da5-185-65-202-122.ngrok-free.app/ws?token={self.token}")
         print()
         self.socket.open(url)
 
