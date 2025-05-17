@@ -84,7 +84,8 @@ class CallSession:
             self.call_active = False
 
     async def cleanup(self):
-        print(f"Cleanup вызван, call_active={self.call_active}")
+        print(
+            f"🧹 cleanup() вызван, call_active={self.call_active}, состояние={self.pc.connectionState if self.pc else 'нет соединения'}")
         if self.microphone:
             print("Остановка микрофона")
             self.microphone.stop()
@@ -109,12 +110,12 @@ class CallSession:
         self.call_active = False
         await self.cleanup()
 
-    async def on_connectionstatechange(self):
-        if self.pc:
-            print(f"Состояние соединения: {self.pc.connectionState}")
-            if self.pc.connectionState in ["failed", "disconnected", "closed"]:
-                self.call_active = False
-                await self.cleanup()
+    def on_connectionstatechange(self):
+        state = self.pc.connectionState
+        print(f"Состояние соединения: {state}")
+        if state in ["failed", "disconnected", "closed"]:
+            self.call_active = False
+            asyncio.create_task(self.cleanup())
 
     async def create_offer(self):
         try:
