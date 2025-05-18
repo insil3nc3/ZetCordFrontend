@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class MicrophoneStreamTrack(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, device=None, sample_rate=48000, chunk=960, channels=None):
+    def __init__(self, device=None, sample_rate=44100, chunk=960, channels=None):
         super().__init__()
         self.sample_rate = sample_rate
         self.chunk = chunk
@@ -25,7 +25,6 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         for i, dev in enumerate(devices):
             logging.info(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
-        # Используем устройство ввода по умолчанию
         device = device if device is not None else sd.default.device[0]
         if device is None or device >= len(devices):
             logging.warning("⚠ Указано недопустимое устройство. Используется устройство по умолчанию")
@@ -76,15 +75,12 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             data = await self.buffer.get()
             logging.debug(
                 f"🎙️ recv(): shape={data.shape}, max={np.max(np.abs(data))}, running={self._running}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}")
-            # Преобразование стерео в моно
             if data.ndim > 1 and data.shape[1] == 2:
                 data = np.mean(data, axis=1)
             elif data.ndim > 1:
                 data = data[:, 0]
-            # Усиление сигнала (x20, с защитой от клиппинга)
             data = np.clip(data * 20.0, -1.0, 1.0)
             logging.debug(f"🎙️ После усиления: max={np.max(np.abs(data))}")
-            # Преобразуем float32 в int16
             data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
             data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.int16)
             logging.debug(

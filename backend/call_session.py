@@ -4,7 +4,6 @@ import sounddevice as sd
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
 from aiortc.contrib.media import MediaStreamError
 from backend.microphone_stream import MicrophoneStreamTrack
-from qasync import asyncSlot
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,7 +40,7 @@ class CallSession:
             logging.info(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
             channels = min(2, device_info['max_input_channels'])
             try:
-                self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
+                self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels, sample_rate=44100)
             except Exception as e:
                 raise RuntimeError(f"Не удалось создать MicrophoneStreamTrack: {e}")
 
@@ -82,7 +81,6 @@ class CallSession:
             self.call_active = True
             asyncio.create_task(self._start_receiver())
 
-    @asyncSlot()
     async def _start_receiver(self):
         if self.receiver:
             await self.receiver.receive_audio()

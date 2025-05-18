@@ -5,7 +5,7 @@ import numpy as np
 import logging
 from PyQt6.QtCore import QTimer
 from PyQt6.QtMultimedia import QMediaDevices
-from qasync import asyncSlot
+from scipy import signal
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -215,10 +215,6 @@ class AudioManager:
             finally:
                 self.input_stream = None
 
-
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 class AudioReceiverTrack:
     def __init__(self, track, audio_manager):
         self.track = track
@@ -234,6 +230,11 @@ class AudioReceiverTrack:
                 frame = await self.track.recv()
                 audio_data = frame.to_ndarray().astype(np.float32) / 32768.0
                 audio_data = np.clip(audio_data * 20.0, -1.0, 1.0)
+
+                if frame.sample_rate != self.audio_manager.sample_rate:
+                    logging.debug(f"Ресэмплинг: {frame.sample_rate}Hz -> {self.audio_manager.sample_rate}Hz")
+                    num_samples = int(len(audio_data) * self.audio_manager.sample_rate / frame.sample_rate)
+                    audio_data = signal.resample(audio_data, num_samples)
 
                 if audio_data.ndim == 1:
                     audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
