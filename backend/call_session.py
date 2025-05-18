@@ -35,7 +35,7 @@ class CallSession:
             self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
             sender = self.pc.addTrack(self.microphone)
             print(
-                f"📡 RTCRtpSender добавлен: track={sender.track}, readyState={sender.readyState}, stream_id={sender._stream_id}")
+                f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
             self.pc.addTrack(self.microphone)
             self.pc.on("icecandidate", self.on_icecandidate)
             self.pc.on("track", self._handle_track)
@@ -164,13 +164,18 @@ class CallSession:
             print(f"Ошибка при создании ответа: {type(e).__name__}: {e}")
             raise
 
-    async def set_remote_description(self, offer):
+    async def set_remote_description(self, desc):
         try:
-            desc = RTCSessionDescription(sdp=offer["sdp"], type=offer["type"])
+            # Если desc - словарь, преобразуем в RTCSessionDescription
+            if isinstance(desc, dict):
+                if "type" not in desc or "sdp" not in desc:
+                    raise ValueError("Словарь SDP должен содержать ключи 'type' и 'sdp'")
+                desc = RTCSessionDescription(sdp=desc["sdp"], type=desc["type"])
+            print(f"📥 Установка удаленного описания: type={desc.type}, sdp={desc.sdp[:100]}...")
             await self.pc.setRemoteDescription(desc)
-            print(f"Установлено удаленное описание типа: {offer['type']}")
+            print(f"✅ Установлено удаленное описание типа: {desc.type}")
         except Exception as e:
-            print(f"Ошибка при установке удаленного описания: {type(e).__name__}: {e}")
+            print(f"❌ Ошибка при установке удаленного описания: {type(e).__name__}: {e}")
             raise
 
     async def on_icecandidate(self, event):

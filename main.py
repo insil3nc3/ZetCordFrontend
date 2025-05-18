@@ -1,3 +1,4 @@
+import backend.patch_av_error
 import sys
 import asyncio
 from pathlib import Path
@@ -13,6 +14,12 @@ from backend.check_for_token import check_for_token_existing
 from screens.login_screen.login_screen import LoginWindow
 from screens.main_screen.main_screen import MainWindow
 
+import os
+import av.logging
+av.logging.set_level(av.logging.PANIC)
+
+os.environ["LC_ALL"] = "en_US.UTF-8"
+os.environ["LANG"] = "en_US.UTF-8"
 window = None
 
 async def main():
@@ -34,6 +41,7 @@ async def main():
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
+
     asyncio.set_event_loop(loop)
 
     loop.create_task(main())

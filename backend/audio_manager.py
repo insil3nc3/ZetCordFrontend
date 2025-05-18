@@ -25,9 +25,8 @@ class AudioManager:
             print("Доступные аудиоустройства:")
             for i, dev in enumerate(devices):
                 print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
-            # Явно выбираем HD-Audio Generic: ALC887-VD Analog (индекс 5)
-            device = 5
-            # Альтернатива: device = 23  # default
+            # Для Linux используем pulse (индекс 17)
+            device = 17
             if device >= len(devices) or devices[device]['max_output_channels'] == 0:
                 raise RuntimeError(f"Устройство {device} недоступно или не поддерживает вывод")
             print(f"Выбрано устройство вывода: {devices[device]['name']} (индекс {device})")
@@ -62,7 +61,7 @@ class AudioManager:
         if self.output_stream:
             try:
                 self.output_stream.stop()
-                self.output_stream.close()
+                self.output_stream.close_this()
                 print("🔇 Аудиовыходной поток остановлен")
             except Exception as e:
                 print(f"❌ Ошибка при остановке OutputStream: {type(e).__name__}: {e}")
@@ -123,7 +122,7 @@ class AudioManager:
         if self.input_stream:
             try:
                 self.input_stream.stop()
-                self.input_stream.close()
+                self.input_stream.close_this()
                 print("🛑 Микрофонный поток остановлен")
             except Exception as e:
                 print(f"❌ Ошибка при остановке микрофона: {type(e).__name__}: {e}")

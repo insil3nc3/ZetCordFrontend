@@ -23,16 +23,17 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
         if device is None or device >= len(devices):
-            print("⚠ Указано недопустимое устройство. Используется устройство по умолчанию (индекс 0)")
-            device = 0
+            print("⚠ Указано недопустимое устройство. Используется устройство по умолчанию")
+            device = sd.default.device[0]  # Устройство ввода по умолчанию
 
-        input_channels = devices[device]['max_input_channels']
+        device_info = devices[device]
+        input_channels = device_info['max_input_channels']
         if input_channels < 1:
-            raise RuntimeError(f"Устройство {devices[device]['name']} не поддерживает входной звук")
+            raise RuntimeError(f"Устройство {device_info['name']} не поддерживает входной звук")
 
         self.channels = channels if channels else min(2, input_channels)
         print(
-            f"Используется устройство: {devices[device]['name']} (индекс {device}), channels={self.channels}, default_samplerate={devices[device]['default_samplerate']}")
+            f"Используется устройство: {device_info['name']} (индекс {device}), channels={self.channels}, default_samplerate={device_info['default_samplerate']}")
 
         try:
             # Проверка поддержки параметров
@@ -81,11 +82,16 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             print(
                 f"🎙️ После обработки: shape={data.shape}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}, dtype={data.dtype}")
 
-            frame = AudioFrame.from_ndarray(
-                data,
-                format='s16',
-                layout='mono'
-            )
+            try:
+                frame = AudioFrame.from_ndarray(
+                    data,
+                    format='s16',
+                    layout='mono'
+                )
+            except UnicodeDecodeError as e:
+                print(f"❌ UnicodeDecodeError в AudioFrame: {e}")
+                raise
+
             frame.pts = self._timestamp
             frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)

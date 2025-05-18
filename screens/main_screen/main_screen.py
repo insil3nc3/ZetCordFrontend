@@ -486,7 +486,7 @@ class MainWindow(QMainWindow):
     @asyncSlot(str)
     async def handle_ws_message(self, message: str):
         try:
-
+            print(f"📬 Получено WebSocket-сообщение: {message}")
             data = json.loads(message)
             print(data["type"])
             if data["type"] == "init":
@@ -509,11 +509,10 @@ class MainWindow(QMainWindow):
                     self.incoming_call = IncomingCallWidget(data, self.audio, self.send_via_ws, self.call_accept)
                     self.incoming_call.show()
             elif data["type"] == "answer":
-                if self.call_widget and self.call_widget.call_session:
-                    self.call_accept()
-                    sdp = data.get("answer")
-                    if sdp:
-                        await self.call_widget.on_answer_received(sdp)
+                sdp = data.get("answer")  # Или другой ключ, в зависимости от структуры
+                if not sdp:
+                    raise ValueError("Ответ не содержит SDP")
+                await self.call_widget.on_answer_received(sdp)
             elif data["type"] == "ice_candidate":
                 if self.call_widget and self.call_widget.call_session:
                     candidate = data.get("candidate")
@@ -524,6 +523,7 @@ class MainWindow(QMainWindow):
 
         except json.JSONDecodeError as e:
             print("ошибка при получении вебсокет сообщения:", e)
+            raise
 
     def call_accept(self):
         if self.call_widget:

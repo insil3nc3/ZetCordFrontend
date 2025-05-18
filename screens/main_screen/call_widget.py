@@ -162,7 +162,7 @@ class CallWidget(QWidget):
         self.set_calling_status(False)
         if self.call_session:
             print(f"🛑 Закрытие call_session, call_session.call_active={self.call_session.call_active}")
-            asyncio.create_task(self.call_session.close())
+            asyncio.create_task(self.call_session.close_this())
         else:
             print("⚠️ call_session не инициализирован, пропуск close()")
 
@@ -203,5 +203,13 @@ class CallWidget(QWidget):
         print("звонок начался: ", info)
 
     async def on_answer_received(self, sdp):
-        await self.call_session.set_remote_description(sdp)
+        try:
+            print(f"📨 Получен ответ (answer): sdp={sdp}")
+            if not self.call_session:
+                raise RuntimeError("CallSession не инициализирован")
+            await self.call_session.set_remote_description(sdp)
+            print("✅ Ответ обработан")
+        except Exception as e:
+            print(f"❌ Ошибка в on_answer_received: {type(e).__name__}: {e}")
+            raise
 
