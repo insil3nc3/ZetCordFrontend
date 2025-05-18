@@ -33,6 +33,8 @@ class CallSession:
             device_info = sd.query_devices(self.audio_device)
             channels = min(2, device_info['max_input_channels'])
             self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
+            sender = self.pc.addTrack(self.microphone)
+            print(f"📡 RTCRtpSender добавлен: id={sender.id}, track={sender.track}, readyState={sender.readyState}")
             self.pc.addTrack(self.microphone)
             self.pc.on("icecandidate", self.on_icecandidate)
             self.pc.on("track", self._handle_track)
@@ -149,8 +151,6 @@ class CallSession:
                 raise RuntimeError("RTCPeerConnection закрыт или не инициализирован")
             answer = await self.pc.createAnswer()
             await self.pc.setLocalDescription(answer)
-            sdp = answer.sdp.replace("opus/48000/2", "opus/48000/1")
-            answer.sdp = sdp
             print("Ответ создан")
             return self.pc.localDescription
         except Exception as e:

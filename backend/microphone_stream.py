@@ -55,31 +55,26 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
-        if not self._running:
-            raise RuntimeError("Микрофонный поток остановлен")
-        data = await self.buffer.get()
-        print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}")
-        frame = AudioFrame.from_ndarray(
-            data.T if data.ndim > 1 else data.reshape(-1, 1),
-            format='flt',
-            layout='mono' if self.channels == 1 else 'stereo'
-        )
-        frame.pts = self._timestamp
-        frame.sample_rate = self.sample_rate
-        frame.time_base = Fraction(1, self.sample_rate)
-        self._timestamp += frame.samples
-        return frame
-
-        frame = AudioFrame.from_ndarray(
-            data.T if data.ndim > 1 else data.reshape(-1, 1),
-            format='flt',
-            layout='mono' if self.channels == 1 else 'stereo'
-        )
-        frame.pts = self._timestamp
-        frame.sample_rate = self.sample_rate
-        frame.time_base = Fraction(1, self.sample_rate)
-        self._timestamp += frame.samples
-        return frame
+        try:
+            if not self._running:
+                raise RuntimeError("Микрофонный поток остановлен")
+            data = await self.buffer.get()
+            print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}")
+            if data.ndim > 1 and data.shape[1] == 2:
+                data = data[:, 0]
+            frame = AudioFrame.from_ndarray(
+                data.reshape(-1, 1),
+                format='flt',
+                layout='mono'
+            )
+            frame.pts = self._timestamp
+            frame.sample_rate = self.sample_rate
+            frame.time_base = Fraction(1, self.sample_rate)
+            self._timestamp += frame.samples
+            return frame
+        except Exception as e:
+            print(f"❌ Ошибка в MicrophoneStreamTrack.recv: {type(e).__name__}: {e}")
+            raise
 
     def stop(self):
         print("🛑 Вызов stop() из:", traceback.format_stack())
