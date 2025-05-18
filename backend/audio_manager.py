@@ -1,4 +1,4 @@
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio, QAudioOutput
 from PyQt6.QtCore import QUrl, QBuffer, QIODevice, QCoreApplication
 import sounddevice as sd
 import numpy as np
@@ -17,10 +17,10 @@ class AudioManager:
         self.audio_output = None
         self.audio_buffer = None
         self.ringtone_player = QMediaPlayer()
-        self.ringtone_output = QAudioSink()
+        self.ringtone_output = QAudioOutput()
         self.ringtone_player.setAudioOutput(self.ringtone_output)
         self.notification_player = QMediaPlayer()
-        self.notification_output = QAudioSink()
+        self.notification_output = QAudioOutput()
         self.notification_player.setAudioOutput(self.notification_output)
         self._output_stopped_intentionally = False
         self._pending_audio_chunks = []
@@ -51,7 +51,12 @@ class AudioManager:
             for fmt in formats_to_try:
                 logging.info(f"Попытка формата: {fmt.sampleRate()}Hz, {fmt.channelCount()} каналов, {fmt.sampleFormat()}")
                 self.audio_output = QAudioSink(QMediaDevices.defaultAudioOutput(), fmt)
-                if self.audio_output.format().sampleFormat() != QAudioFormat.SampleFormat.UnknownFormat:
+                if self.audio_output.format().sampleFormat() in (
+                    QAudioFormat.SampleFormat.UInt8,
+                    QAudioFormat.SampleFormat.Int16,
+                    QAudioFormat.SampleFormat.Int32,
+                    QAudioFormat.SampleFormat.Float
+                ):
                     logging.info(f"Формат принят: {self.audio_output.format().sampleRate()}Hz, {self.audio_output.format().sampleFormat()}")
                     break
             else:
@@ -60,6 +65,7 @@ class AudioManager:
                 logging.info(f"Используется формат устройства: {fmt.sampleRate()}Hz, {fmt.channelCount()} каналов, {fmt.sampleFormat()}")
 
             self.audio_output.setVolume(1.0)
+            self.audio_output.setBufferSize(1024 * 16)
             self.audio_buffer = QBuffer()
             self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
             self.audio_output.start(self.audio_buffer)
@@ -90,8 +96,7 @@ class AudioManager:
                 logging.debug("Пустой аудиофрейм, пропускаем")
                 return
 
-            if not self.audio_output or self.audio_output.state() not in (
-            QAudio.State.ActiveState, QAudio.State.IdleState):
+            if not self.audio_output or self.audio_output.state() not in (QAudio.State.ActiveState, QAudio.State.IdleState):
                 logging.warning("⚠ QAudioSink не активен, добавляем в очередь")
                 self._pending_audio_chunks.append(audio_chunk)
                 QTimer.singleShot(0, self._initialize_audio_output)
@@ -110,7 +115,7 @@ class AudioManager:
             if not self.audio_buffer.isOpen():
                 self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
 
-            if self.audio_buffer.pos() > 10 * 1024 * 1024:  # 10MB limit
+            if self.audio_buffer.pos() > 10 * 1024 * 1024:
                 logging.warning("⚠ Буфер переполнен, сбрасываем")
                 self.audio_buffer.seek(0)
 
@@ -145,7 +150,7 @@ class AudioManager:
             self.ringtone_output.setVolume(0.8)
             self.ringtone_player.setLoops(-1 if loop else 1)
             self.ringtone_player.play()
-            logging.info(f"📞 Воспроизведение рингтона: {path}")
+            logging.info(f"📞 Воспроизведение рингтона: {path}, состояние: {self.ringtone_player.mediaStatus()}")
         except Exception as e:
             logging.error(f"❌ Ошибка при воспроизведении рингтона: {type(e).__name__}: {e}")
 
@@ -161,7 +166,7 @@ class AudioManager:
             self.notification_player.setSource(QUrl.fromLocalFile(path))
             self.notification_output.setVolume(0.6)
             self.notification_player.play()
-            logging.info(f"🔔 Воспроизведение уведомления: {path}")
+            logging.info(f"🔔 Воспроизведение уведомления: {path}, состояние: {self.notification_player.mediaStatus()}")
         except Exception as e:
             logging.error(f"❌ Ошибка при воспроизведении уведомления: {type(e).__name__}: {e}")
 
@@ -211,6 +216,7 @@ class AudioManager:
                 self.input_stream = None
 
 
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class AudioReceiverTrack:
@@ -219,7 +225,6 @@ class AudioReceiverTrack:
         self.audio_manager = audio_manager
         self.running = True
 
-    @asyncSlot()
     async def receive_audio(self):
         try:
             self.audio_manager.start_output_stream()

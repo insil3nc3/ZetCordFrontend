@@ -3,8 +3,6 @@ import numpy as np
 import sounddevice as sd
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
 from aiortc.contrib.media import MediaStreamError
-
-from backend.audio_manager import AudioReceiverTrack
 from backend.microphone_stream import MicrophoneStreamTrack
 from qasync import asyncSlot
 import logging
@@ -14,12 +12,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class CallSession:
     def __init__(self, send_ice_callback, audio_manager, audio_device=None):
         self.pc = None
-        self.receiver = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
         self.audio_device = audio_device
         self.microphone = None
         self.remote_track = None
+        self.receiver = None
         self.call_active = False
         self._initialize()
 
@@ -31,7 +29,6 @@ class CallSession:
             for i, dev in enumerate(devices):
                 logging.info(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
-            # Используем устройство ввода по умолчанию
             selected_device = self.audio_device if self.audio_device is not None else sd.default.device[0]
             if selected_device is None or selected_device >= len(devices):
                 selected_device = next((i for i, d in enumerate(devices) if d['max_input_channels'] >= 1), None)
@@ -39,7 +36,7 @@ class CallSession:
                     raise ValueError("Не найдено устройство с поддержкой входного звука")
             self.audio_device = selected_device
             if self.audio_device < 0 or self.audio_device >= len(devices):
-                self.audio_device = sd.default.device[1]  # Use default output device
+                self.audio_device = sd.default.device[1]
             device_info = sd.query_devices(self.audio_device)
             logging.info(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
             channels = min(2, device_info['max_input_channels'])
@@ -77,64 +74,18 @@ class CallSession:
             raise
 
     def _handle_track(self, track):
+        from backend.audio_manager import AudioReceiverTrack
         logging.info(f"Получен трек: {track.kind}, id={track.id}, readyState={track.readyState}")
         if track.kind == "audio":
             self.remote_track = track
-            self.call_active = True
             self.receiver = AudioReceiverTrack(track, self.audio_manager)
-            asyncio.create_task(self.receiver.receive_audio())
+            self.call_active = True
+            asyncio.create_task(self._start_receiver())
 
     @asyncSlot()
-    async def _receive_audio(self, track):
-        try:
-            self.audio_manager.start_output_stream()
-            logging.info("🔁 Начат приём аудиофреймов")
-            timeout = 10
-            elapsed = 0
-            while self.pc.connectionState != "connected" and elapsed < timeout:
-                logging.info(f"⏳ Ожидание соединения... (текущее: {self.pc.connectionState})")
-                await asyncio.sleep(0.1)
-                elapsed += 0.1
-            if self.pc.connectionState != "connected":
-                raise RuntimeError(f"Не удалось установить соединение: {self.pc.connectionState}")
-            logging.info("✅ Соединение установлено")
-            while self.call_active and self.pc and self.pc.connectionState == "connected" and track.readyState == "live":
-                try:
-                    frame = await track.recv()
-                    audio_data = frame.to_ndarray()
-                    logging.debug(
-                        f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}, samples={frame.samples}, sample_rate={frame.sample_rate}")
-                    if audio_data.dtype != np.float32:
-                        audio_data = audio_data.astype(np.float32) / 32768.0
-                    # Усиление сигнала (x20, с защитой от клиппинга)
-                    audio_data = np.clip(audio_data * 20.0, -1.0, 1.0)
-                    logging.debug(f"🎧 После усиления: max={np.max(np.abs(audio_data))}")
-                    if audio_data.ndim == 1:
-                        audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
-                    elif audio_data.shape[1] == 1:
-                        audio_data = np.repeat(audio_data, 2, axis=1)
-                    max_amplitude = np.max(np.abs(audio_data))
-                    if max_amplitude > 1.0:
-                        audio_data = audio_data / max_amplitude
-                        logging.debug(f"Нормализация выполнена: новый max={np.max(np.abs(audio_data))}")
-                    self.audio_manager.play_audio_chunk(audio_data)
-                except MediaStreamError:
-                    logging.warning("❌ Удаленный аудиопоток завершился")
-                    break
-                except Exception as e:
-                    logging.error(f"❌ Ошибка при приёме аудио: {type(e).__name__}: {e}")
-                    if isinstance(e, (StopAsyncIteration, asyncio.CancelledError)):
-                        logging.info("Завершение цикла получения аудио")
-                        break
-                    await asyncio.sleep(0.05)
-                    continue
-        except Exception as e:
-            logging.error(f"❌ Критическая ошибка в _receive_audio: {type(e).__name__}: {e}")
-        finally:
-            logging.info("🛑 Завершена обработка аудиотрека")
-            if self.call_active:
-                self.call_active = False
-                await self.cleanup()
+    async def _start_receiver(self):
+        if self.receiver:
+            await self.receiver.receive_audio()
 
     async def cleanup(self):
         logging.info(
@@ -143,9 +94,6 @@ class CallSession:
             logging.info("Остановка микрофона")
             self.microphone.stop()
             self.microphone = None
-        if self.receiver:
-            await self.receiver.stop()
-            self.receiver = None
         if self.remote_track:
             logging.info("Остановка удаленного трека")
             try:
@@ -153,6 +101,10 @@ class CallSession:
             except Exception as e:
                 logging.error(f"Ошибка при остановке remote_track: {type(e).__name__}: {e}")
             self.remote_track = None
+        if self.receiver:
+            logging.info("Остановка AudioReceiverTrack")
+            await self.receiver.stop()
+            self.receiver = None
         if self.pc:
             logging.info("Закрытие RTCPeerConnection")
             try:
