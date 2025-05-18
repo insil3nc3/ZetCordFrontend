@@ -6,6 +6,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
 class AudioManager:
     def __init__(self, sample_rate=48000, channels=2):
         self.sample_rate = sample_rate
@@ -25,43 +26,65 @@ class AudioManager:
             logging.info("🔊 Аудиовыход уже запущен")
             return
         try:
-            # Настройка формата аудио для QAudioOutput
+            # Настройка формата аудио
             audio_format = QAudioFormat()
             audio_format.setSampleRate(self.sample_rate)
             audio_format.setChannelCount(self.output_channels)
-            audio_format.setSampleFormat(QAudioFormat.SampleFormat.Float32)
+            # Используем Float, fallback на Int16 при необходимости
+            audio_format.setSampleFormat(QAudioFormat.Float)
+
+            # Проверка поддержки формата устройством
             self.audio_output = QAudioOutput(audio_format)
+            if not self.audio_output.isFormatSupported(audio_format):
+                logging.warning("⚠ Формат Float не поддерживается, пробуем Int16")
+                audio_format.setSampleFormat(QAudioFormat.Int16)
+                self.audio_output = QAudioOutput(audio_format)
+                if not self.audio_output.isFormatSupported(audio_format):
+                    raise RuntimeError("Формат аудио не поддерживается устройством")
+
             self.audio_output.setVolume(1.0)
             self.audio_buffer = QBuffer()
-            self.audio_buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+            # Запускаем воспроизведение один раз
+            self.audio_output.start(self.audio_buffer)
             logging.info("🔊 Аудиовыходной поток запущен через QAudioOutput")
         except Exception as e:
             logging.error(f"❌ Ошибка при запуске QAudioOutput: {type(e).__name__}: {e}")
-            self.audio_output = None
+            self.stop_output_stream()
 
     def play_audio_chunk(self, audio_chunk: np.ndarray):
         try:
-            logging.debug(f"Воспроизведение аудио: shape={audio_chunk.shape}, dtype={audio_chunk.dtype}, max={np.max(np.abs(audio_chunk))}")
+            # Проверка входного формата
+            if audio_chunk.size == 0:
+                logging.debug("Пустой аудиофрейм, пропускаем")
+                return
             if audio_chunk.dtype != np.float32:
                 audio_chunk = audio_chunk.astype(np.float32)
-            # Усиление сигнала (x20, с защитой от клиппинга)
-            audio_chunk = np.clip(audio_chunk * 20.0, -1.0, 1.0)
-            logging.debug(f"После усиления: max={np.max(np.abs(audio_chunk))}")
-            # Проверка формы массива и преобразование в стерео
+            # Усиление сигнала (x10, с защитой от клиппинга)
+            audio_chunk = np.clip(audio_chunk * 10.0, -1.0, 1.0)
+
+            # Проверка формы массива
             if audio_chunk.ndim == 1:
                 audio_chunk = np.repeat(audio_chunk[:, np.newaxis], self.output_channels, axis=1)
             elif audio_chunk.shape[1] != self.output_channels:
                 audio_chunk = np.repeat(audio_chunk[:, :1], self.output_channels, axis=1)
-            if self.audio_output and self.audio_output.state() != QAudioOutput.State.Stopped:
-                # Конвертируем в байты для QAudioOutput
+
+            if self.audio_output and self.audio_output.state() in (QAudioOutput.State.Active, QAudioOutput.State.Idle):
+                if not self.audio_buffer.isOpen():
+                    self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+                # Записываем данные в буфер
                 audio_bytes = audio_chunk.tobytes()
-                self.audio_buffer.write(audio_bytes)
-                self.audio_output.start(self.audio_buffer)
-                logging.debug(f"Аудио отправлено в QAudioOutput: shape={audio_chunk.shape}")
+                bytes_written = self.audio_buffer.write(audio_bytes)
+                if bytes_written != len(audio_bytes):
+                    logging.warning(f"⚠ Не все аудиоданные записаны: {bytes_written}/{len(audio_bytes)} байт")
+                # Логируем только при первой записи или ошибке
+                if self.audio_buffer.pos() < len(audio_bytes):
+                    logging.info(f"Аудио отправлено в QAudioOutput: shape={audio_chunk.shape}")
             else:
                 logging.warning("⚠ QAudioOutput не запущен или остановлен")
         except Exception as e:
             logging.error(f"❌ Ошибка при воспроизведении аудио: {type(e).__name__}: {e}")
+            self.stop_output_stream()
 
     def stop_output_stream(self):
         if self.audio_output:

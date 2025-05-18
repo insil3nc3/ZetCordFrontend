@@ -107,7 +107,7 @@ class IncomingCallWidget(QDialog):
     async def call_accepted(self):
         self.ringtone_off()
         print("Звонок принят")
-        self.call_session = CallSession(self.send_ice_callback, self.audio, audio_device=0)
+        self.call_session = CallSession(self.send_ice_callback, self.audio)
 
         # Подписка на ICE кандидатов — обязательно, иначе кандидаты не будут отправляться
 
