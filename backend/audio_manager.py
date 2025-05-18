@@ -1,5 +1,5 @@
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio, QAudioOutput
-from PyQt6.QtCore import QUrl, QBuffer, QIODevice, QCoreApplication, QEvent
+from PyQt6.QtCore import QObject, QEvent, QUrl, QBuffer, QIODevice, QCoreApplication
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio, QAudioOutput, QMediaDevices
 import sounddevice as sd
 import numpy as np
 import logging
@@ -10,12 +10,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class InitializeAudioEvent(QEvent):
     EventType = QEvent.Type(QEvent.registerEventType())
 
-    def __init__(self, audio_manager):
+    def __init__(self):
         super().__init__(self.EventType)
-        self.audio_manager = audio_manager
 
-class AudioManager:
-    def __init__(self, sample_rate=44100, channels=2):
+class AudioManager(QObject):
+    def __init__(self, sample_rate=44100, channels=2, parent=None):
+        super().__init__(parent)
         self.sample_rate = sample_rate
         self.output_channels = channels
         self.input_stream = None
@@ -97,7 +97,7 @@ class AudioManager:
         if self.audio_output and self.audio_output.state() in (QAudio.State.ActiveState, QAudio.State.IdleState):
             logging.info("🔊 Аудиовыход уже запущен")
             return
-        QCoreApplication.postEvent(self, InitializeAudioEvent(self))
+        QCoreApplication.postEvent(self, InitializeAudioEvent())
 
     def play_audio_chunk(self, audio_chunk: np.ndarray):
         try:
@@ -108,7 +108,7 @@ class AudioManager:
             if not self.audio_output or self.audio_output.state() not in (QAudio.State.ActiveState, QAudio.State.IdleState):
                 logging.warning("⚠ QAudioSink не активен, добавляем в очередь")
                 self._pending_audio_chunks.append(audio_chunk)
-                QCoreApplication.postEvent(self, InitializeAudioEvent(self))
+                QCoreApplication.postEvent(self, InitializeAudioEvent())
                 return
 
             if audio_chunk.dtype != np.float32:
@@ -119,6 +119,8 @@ class AudioManager:
                 audio_chunk = np.repeat(audio_chunk[:, np.newaxis], self.output_channels, axis=1)
             elif audio_chunk.shape[1] != self.output_channels:
                 audio_chunk = np.repeat(audio_chunk[:, :1], self.output_channels, axis=1)
+
+            logging.debug(f"Получен аудиофрейм: shape={audio_chunk.shape}, max={np.max(np.abs(audio_chunk))}")
 
             audio_bytes = audio_chunk.tobytes()
             if not self.audio_buffer.isOpen():

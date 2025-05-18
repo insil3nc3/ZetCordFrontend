@@ -144,7 +144,7 @@ class CallSession:
                 logging.info(f"📡 RTCRtpSender добавлен в create_offer: track={sender.track}, stream_id={sender._stream_id}")
             offer = await self.pc.createOffer()
             await self.pc.setLocalDescription(offer)
-            logging.info("Оффер создан")
+            logging.info(f"Оффер создан: {offer.sdp[:100]}...")
             return self.pc.localDescription
         except Exception as e:
             logging.error(f"Ошибка при создании оффера: {type(e).__name__}: {e}")
@@ -165,10 +165,10 @@ class CallSession:
                 logging.info(f"📡 RTCRtpSender добавлен в create_answer: track={sender.track}, stream_id={sender._stream_id}")
             answer = await self.pc.createAnswer()
             await self.pc.setLocalDescription(answer)
-            logging.info("Ответ создан")
+            logging.info(f"Ответ создан: {answer.sdp[:100]}...")
             return self.pc.localDescription
         except Exception as e:
-            logging.error(f"Ошибка при создании ответа: {type(e).__name__}: {e}")
+            logging.error(f"Ошибка при создания ответа: {type(e).__name__}: {e}")
             raise
 
     async def set_remote_description(self, desc):
