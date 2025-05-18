@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from fractions import Fraction
 import numpy as np
 import sounddevice as sd
@@ -57,7 +58,17 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         if not self._running:
             raise RuntimeError("Микрофонный поток остановлен")
         data = await self.buffer.get()
-        print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}")
+        print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}")
+        frame = AudioFrame.from_ndarray(
+            data.T if data.ndim > 1 else data.reshape(-1, 1),
+            format='flt',
+            layout='mono' if self.channels == 1 else 'stereo'
+        )
+        frame.pts = self._timestamp
+        frame.sample_rate = self.sample_rate
+        frame.time_base = Fraction(1, self.sample_rate)
+        self._timestamp += frame.samples
+        return frame
 
         frame = AudioFrame.from_ndarray(
             data.T if data.ndim > 1 else data.reshape(-1, 1),
@@ -71,6 +82,7 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         return frame
 
     def stop(self):
+        print("🛑 Вызов stop() из:", traceback.format_stack())
         self._running = False
         if hasattr(self, 'stream') and self.stream:
             self.stream.stop()

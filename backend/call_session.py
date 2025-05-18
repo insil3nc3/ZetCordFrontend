@@ -69,7 +69,8 @@ class CallSession:
                 try:
                     frame = await track.recv()
                     audio_data = frame.to_ndarray(format="flt")
-                    print(f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}")
+                    print(
+                        f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}")
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
                     if audio_data.ndim == 1:
@@ -84,6 +85,7 @@ class CallSession:
                 except Exception as e:
                     print(f"❌ Ошибка при приёме аудио: {type(e).__name__}: {e}")
                     if isinstance(e, (StopAsyncIteration, asyncio.CancelledError)):
+                        print("Завершение цикла получения аудио")
                         break
                     await asyncio.sleep(0.05)
                     continue
@@ -135,8 +137,6 @@ class CallSession:
                 raise RuntimeError("RTCPeerConnection или микрофон не инициализированы")
             offer = await self.pc.createOffer()
             await self.pc.setLocalDescription(offer)
-            sdp = offer.sdp.replace("opus/48000/2", "opus/48000/1")
-            offer.sdp = sdp
             print("Оффер создан")
             return self.pc.localDescription
         except Exception as e:
