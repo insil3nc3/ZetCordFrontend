@@ -1,13 +1,18 @@
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio, QAudioOutput
-from PyQt6.QtCore import QUrl, QBuffer, QIODevice, QCoreApplication
+from PyQt6.QtCore import QUrl, QBuffer, QIODevice, QCoreApplication, QEvent
 import sounddevice as sd
 import numpy as np
 import logging
-from PyQt6.QtCore import QTimer
-from PyQt6.QtMultimedia import QMediaDevices
 from scipy import signal
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class InitializeAudioEvent(QEvent):
+    EventType = QEvent.Type(QEvent.registerEventType())
+
+    def __init__(self, audio_manager):
+        super().__init__(self.EventType)
+        self.audio_manager = audio_manager
 
 class AudioManager:
     def __init__(self, sample_rate=44100, channels=2):
@@ -24,6 +29,10 @@ class AudioManager:
         self.notification_player.setAudioOutput(self.notification_output)
         self._output_stopped_intentionally = False
         self._pending_audio_chunks = []
+
+    def customEvent(self, event):
+        if event.type() == InitializeAudioEvent.EventType:
+            self._initialize_audio_output()
 
     def _initialize_audio_output(self, audio_format=None):
         """Initialize or reinitialize QAudioSink with a given format."""
@@ -88,7 +97,7 @@ class AudioManager:
         if self.audio_output and self.audio_output.state() in (QAudio.State.ActiveState, QAudio.State.IdleState):
             logging.info("🔊 Аудиовыход уже запущен")
             return
-        QTimer.singleShot(0, self._initialize_audio_output)
+        QCoreApplication.postEvent(self, InitializeAudioEvent(self))
 
     def play_audio_chunk(self, audio_chunk: np.ndarray):
         try:
@@ -99,7 +108,7 @@ class AudioManager:
             if not self.audio_output or self.audio_output.state() not in (QAudio.State.ActiveState, QAudio.State.IdleState):
                 logging.warning("⚠ QAudioSink не активен, добавляем в очередь")
                 self._pending_audio_chunks.append(audio_chunk)
-                QTimer.singleShot(0, self._initialize_audio_output)
+                QCoreApplication.postEvent(self, InitializeAudioEvent(self))
                 return
 
             if audio_chunk.dtype != np.float32:
