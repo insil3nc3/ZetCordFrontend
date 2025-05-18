@@ -9,7 +9,7 @@ class CallSession:
         self.pc = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
-        self.audio_device = audio_device if audio_device is not None else 0
+        self.audio_device = audio_device
         self.microphone = None
         self.remote_track = None
         self.call_active = False
@@ -22,21 +22,38 @@ class CallSession:
             print("Доступные аудиоустройства:")
             for i, dev in enumerate(devices):
                 print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
-            if self.audio_device is None:
+
+            # Выбираем устройство с входными каналами
+            selected_device = None
+            if self.audio_device is not None:
+                device_info = sd.query_devices(self.audio_device)
+                if device_info['max_input_channels'] >= 1:
+                    selected_device = self.audio_device
+                else:
+                    print(f"Устройство с индексом {self.audio_device} не поддерживает входной звук")
+            if selected_device is None:
                 for i, dev in enumerate(devices):
-                    if dev["max_input_channels"] >= 1:
-                        self.audio_device = i
+                    if dev['max_input_channels'] >= 1:
+                        selected_device = i
                         break
                 else:
-                    raise ValueError("Не найдено устройство ввода")
-            print(f"Выбрано устройство ввода: {devices[self.audio_device]['name']} (индекс {self.audio_device})")
+                    raise ValueError("Не найдено устройство с поддержкой входного звука")
+
+            self.audio_device = selected_device
             device_info = sd.query_devices(self.audio_device)
+            print(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
             channels = min(2, device_info['max_input_channels'])
-            self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
+            try:
+                self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
+            except Exception as e:
+                raise RuntimeError(f"Не удалось создать MicrophoneStreamTrack: {e}")
+
+            # Очищаем старые отправители перед добавлением нового трека
+            for sender in self.pc.getSenders():
+                if sender.track:
+                    self.pc.removeTrack(sender)
             sender = self.pc.addTrack(self.microphone)
-            print(
-                f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
-            self.pc.addTrack(self.microphone)
+            print(f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
             self.pc.on("icecandidate", self.on_icecandidate)
             self.pc.on("track", self._handle_track)
             self.pc.on("connectionstatechange", self.on_connectionstatechange)
@@ -46,11 +63,8 @@ class CallSession:
             print("CallSession инициализирован")
         except Exception as e:
             print(f"Ошибка при инициализации CallSession: {type(e).__name__}: {e}")
-            # Не вызываем cleanup() для некритичных ошибок
-            if isinstance(e, ValueError):  # Например, отсутствие устройства ввода
-                asyncio.create_task(self.cleanup())
-            else:
-                print("Инициализация продолжается несмотря на ошибку")
+            asyncio.create_task(self.cleanup())
+            raise  # Прерываем инициализацию при любой ошибке
 
     def _handle_track(self, track):
         print(f"Получен трек: {track.kind}, id={track.id}")
@@ -118,6 +132,9 @@ class CallSession:
         if self.pc:
             print("Закрытие RTCPeerConnection")
             try:
+                for sender in self.pc.getSenders():
+                    if sender.track:
+                        self.pc.removeTrack(sender)
                 await self.pc.close()
             except Exception as e:
                 print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
@@ -144,6 +161,12 @@ class CallSession:
                 raise RuntimeError("RTCPeerConnection не инициализирован или закрыт")
             if not self.microphone:
                 raise RuntimeError("Микрофон не инициализирован")
+            for sender in self.pc.getSenders():
+                if sender.track:
+                    self.pc.removeTrack(sender)
+            if not any(sender.track == self.microphone for sender in self.pc.getSenders()):
+                sender = self.pc.addTrack(self.microphone)
+                print(f"📡 RTCRtpSender добавлен в create_offer: track={sender.track}, stream_id={sender._stream_id}")
             offer = await self.pc.createOffer()
             await self.pc.setLocalDescription(offer)
             print("Оффер создан")
@@ -156,6 +179,12 @@ class CallSession:
         try:
             if not self.pc:
                 raise RuntimeError("RTCPeerConnection закрыт или не инициализирован")
+            for sender in self.pc.getSenders():
+                if sender.track:
+                    self.pc.removeTrack(sender)
+            if not any(sender.track == self.microphone for sender in self.pc.getSenders()):
+                sender = self.pc.addTrack(self.microphone)
+                print(f"📡 RTCRtpSender добавлен в create_answer: track={sender.track}, stream_id={sender._stream_id}")
             answer = await self.pc.createAnswer()
             await self.pc.setLocalDescription(answer)
             print("Ответ создан")
@@ -166,7 +195,6 @@ class CallSession:
 
     async def set_remote_description(self, desc):
         try:
-            # Если desc - словарь, преобразуем в RTCSessionDescription
             if isinstance(desc, dict):
                 if "type" not in desc or "sdp" not in desc:
                     raise ValueError("Словарь SDP должен содержать ключи 'type' и 'sdp'")
@@ -188,6 +216,7 @@ class CallSession:
                     "sdpMLineIndex": event.candidate.sdpMLineIndex,
                 }
             })
+            print(f"Отправлен ICE-кандидат: {event.candidate.candidate[:50]}...")
 
     async def add_ice_candidate(self, candidate):
         try:
