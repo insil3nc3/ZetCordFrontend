@@ -25,10 +25,13 @@ class AudioManager:
             print("Доступные аудиоустройства:")
             for i, dev in enumerate(devices):
                 print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
-            # Для Linux используем pulse (индекс 17)
+            # Для Linux используем pulse (индекс 17), но проверяем доступность
             device = 17
             if device >= len(devices) or devices[device]['max_output_channels'] == 0:
-                raise RuntimeError(f"Устройство {device} недоступно или не поддерживает вывод")
+                # Выбираем первое доступное устройство вывода
+                device = next((i for i, d in enumerate(devices) if d['max_output_channels'] > 0), None)
+                if device is None:
+                    raise RuntimeError("Нет доступных устройств вывода")
             print(f"Выбрано устройство вывода: {devices[device]['name']} (индекс {device})")
             self.output_stream = sd.OutputStream(
                 samplerate=self.sample_rate,
@@ -48,12 +51,17 @@ class AudioManager:
             print(f"Воспроизведение аудио: shape={audio_chunk.shape}, dtype={audio_chunk.dtype}, max={np.max(np.abs(audio_chunk))}")
             if audio_chunk.dtype != np.float32:
                 audio_chunk = audio_chunk.astype(np.float32)
-            if audio_chunk.shape[1] != self.output_channels:
+            # Усиление сигнала (x10, с защитой от клиппинга)
+            audio_chunk = np.clip(audio_chunk * 10.0, -1.0, 1.0)
+            # Проверка формы массива и преобразование в стерео, если необходимо
+            if audio_chunk.ndim == 1:
+                audio_chunk = np.repeat(audio_chunk[:, np.newaxis], self.output_channels, axis=1)
+            elif audio_chunk.shape[1] != self.output_channels:
                 audio_chunk = np.repeat(audio_chunk[:, :1], self.output_channels, axis=1)
-            if self.output_stream:
+            if self.output_stream and self.output_stream.active:
                 self.output_stream.write(audio_chunk)
             else:
-                print("⚠ OutputStream не запущен")
+                print("⚠ OutputStream не запущен или неактивен")
         except Exception as e:
             print(f"❌ Ошибка при воспроизведении аудио: {type(e).__name__}: {e}")
 
@@ -61,7 +69,7 @@ class AudioManager:
         if self.output_stream:
             try:
                 self.output_stream.stop()
-                self.output_stream.close_this()
+                self.output_stream.close()
                 print("🔇 Аудиовыходной поток остановлен")
             except Exception as e:
                 print(f"❌ Ошибка при остановке OutputStream: {type(e).__name__}: {e}")

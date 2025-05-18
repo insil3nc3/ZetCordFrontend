@@ -72,11 +72,14 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             data = await self.buffer.get()
             print(
                 f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}")
+            # Преобразование стерео в моно
             if data.ndim > 1 and data.shape[1] == 2:
+                data = np.mean(data, axis=1)
+            elif data.ndim > 1:
                 data = data[:, 0]
-
+            # Усиление сигнала (x10, с защитой от клиппинга)
+            data = np.clip(data * 10.0, -1.0, 1.0)
             # Преобразуем float32 в int16
-            # float32 в диапазоне [-1, 1] -> int16 в диапазоне [-32768, 32767]
             data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
             data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.int16)
             print(
@@ -88,8 +91,8 @@ class MicrophoneStreamTrack(MediaStreamTrack):
                     format='s16',
                     layout='mono'
                 )
-            except UnicodeDecodeError as e:
-                print(f"❌ UnicodeDecodeError в AudioFrame: {e}")
+            except Exception as e:
+                print(f"❌ Ошибка в AudioFrame: {type(e).__name__}: {e}")
                 raise
 
             frame.pts = self._timestamp

@@ -2,6 +2,7 @@ import asyncio
 import numpy as np
 import sounddevice as sd
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
+from aiortc.contrib.media import MediaStreamError
 from backend.microphone_stream import MicrophoneStreamTrack
 
 class CallSession:
@@ -9,7 +10,7 @@ class CallSession:
         self.pc = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
-        self.audio_device = audio_device
+        self.audio_device = audio_device if audio_device else 0
         self.microphone = None
         self.remote_track = None
         self.call_active = False
@@ -48,14 +49,25 @@ class CallSession:
             except Exception as e:
                 raise RuntimeError(f"Не удалось создать MicrophoneStreamTrack: {e}")
 
-            # Очищаем старые отправители перед добавлением нового трека
+            # Проверяем существующие отправители
+            existing_sender = None
             for sender in self.pc.getSenders():
-                if sender.track:
-                    self.pc.removeTrack(sender)
-            sender = self.pc.addTrack(self.microphone)
-            print(f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
+                if sender.track:  # Учитываем только отправители с действительным треком
+                    existing_sender = sender
+                    break
+            if existing_sender:
+                try:
+                    asyncio.get_event_loop().run_until_complete(existing_sender.replaceTrack(self.microphone))
+                    print(f"📡 RTCRtpSender обновлен: track={self.microphone}, stream_id={existing_sender._stream_id}")
+                except Exception as e:
+                    print(f"Ошибка при замене трека в _initialize: {type(e).__name__}: {e}")
+                    sender = self.pc.addTrack(self.microphone)
+                    print(f"📡 RTCRtpSender добавлен вместо замены: track={sender.track}, stream_id={sender._stream_id}")
+            else:
+                sender = self.pc.addTrack(self.microphone)
+                print(f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
             self.pc.on("icecandidate", self.on_icecandidate)
-            self.pc.on("track", self._handle_track)
+            self.pc.on("[0mtrack", self._handle_track)
             self.pc.on("connectionstatechange", self.on_connectionstatechange)
             self.pc.on("datachannel", lambda event: print(f"Получен DataChannel: {event.channel.label}"))
             self.pc.on("iceconnectionstatechange", lambda: print(f"ICE connection state: {self.pc.iceConnectionState}"))
@@ -64,7 +76,7 @@ class CallSession:
         except Exception as e:
             print(f"Ошибка при инициализации CallSession: {type(e).__name__}: {e}")
             asyncio.create_task(self.cleanup())
-            raise  # Прерываем инициализацию при любой ошибке
+            raise
 
     def _handle_track(self, track):
         print(f"Получен трек: {track.kind}, id={track.id}")
@@ -86,14 +98,16 @@ class CallSession:
             if self.pc.connectionState != "connected":
                 raise RuntimeError(f"Не удалось установить соединение: {self.pc.connectionState}")
             print("✅ Соединение установлено")
-            while self.call_active and self.pc and self.pc.connectionState == "connected":
+            while self.call_active and self.pc and self.pc.connectionState == "connected" and track.readyState == "live":
                 try:
                     frame = await track.recv()
-                    audio_data = frame.to_ndarray(format="flt")
+                    audio_data = frame.to_ndarray()
                     print(
                         f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}, samples={frame.samples}, sample_rate={frame.sample_rate}")
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
+                    # Усиление сигнала (x10, с защитой от клиппинга)
+                    audio_data = np.clip(audio_data * 10.0, -32768, 32767).astype(np.float32) / 32768.0
                     if audio_data.ndim == 1:
                         audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
                     elif audio_data.shape[1] == 1:
@@ -103,6 +117,9 @@ class CallSession:
                         audio_data = audio_data / max_amplitude
                         print(f"Нормализация выполнена: новый max={np.max(np.abs(audio_data))}")
                     self.audio_manager.play_audio_chunk(audio_data)
+                except MediaStreamError:
+                    print("❌ Удаленный аудиопоток завершился")
+                    break
                 except Exception as e:
                     print(f"❌ Ошибка при приёме аудио: {type(e).__name__}: {e}")
                     if isinstance(e, (StopAsyncIteration, asyncio.CancelledError)):
@@ -132,9 +149,6 @@ class CallSession:
         if self.pc:
             print("Закрытие RTCPeerConnection")
             try:
-                for sender in self.pc.getSenders():
-                    if sender.track:
-                        self.pc.removeTrack(sender)
                 await self.pc.close()
             except Exception as e:
                 print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
@@ -161,10 +175,13 @@ class CallSession:
                 raise RuntimeError("RTCPeerConnection не инициализирован или закрыт")
             if not self.microphone:
                 raise RuntimeError("Микрофон не инициализирован")
+            track_already_added = False
             for sender in self.pc.getSenders():
-                if sender.track:
-                    self.pc.removeTrack(sender)
-            if not any(sender.track == self.microphone for sender in self.pc.getSenders()):
+                if sender.track == self.microphone:
+                    track_already_added = True
+                    print(f"📡 Трек уже добавлен в RTCRtpSender: track={self.microphone}, stream_id={sender._stream_id}")
+                    break
+            if not track_already_added:
                 sender = self.pc.addTrack(self.microphone)
                 print(f"📡 RTCRtpSender добавлен в create_offer: track={sender.track}, stream_id={sender._stream_id}")
             offer = await self.pc.createOffer()
@@ -179,10 +196,13 @@ class CallSession:
         try:
             if not self.pc:
                 raise RuntimeError("RTCPeerConnection закрыт или не инициализирован")
+            track_already_added = False
             for sender in self.pc.getSenders():
-                if sender.track:
-                    self.pc.removeTrack(sender)
-            if not any(sender.track == self.microphone for sender in self.pc.getSenders()):
+                if sender.track == self.microphone:
+                    track_already_added = True
+                    print(f"📡 Трек уже добавлен в RTCRtpSender: track={self.microphone}, stream_id={sender._stream_id}")
+                    break
+            if not track_already_added:
                 sender = self.pc.addTrack(self.microphone)
                 print(f"📡 RTCRtpSender добавлен в create_answer: track={sender.track}, stream_id={sender._stream_id}")
             answer = await self.pc.createAnswer()
