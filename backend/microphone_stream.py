@@ -5,11 +5,14 @@ import numpy as np
 import sounddevice as sd
 from aiortc import MediaStreamTrack
 from av import AudioFrame
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class MicrophoneStreamTrack(MediaStreamTrack):
     kind = "audio"
 
-    def __init__(self, device=0, sample_rate=48000, chunk=960, channels=None):
+    def __init__(self, device=None, sample_rate=48000, chunk=960, channels=None):
         super().__init__()
         self.sample_rate = sample_rate
         self.chunk = chunk
@@ -18,13 +21,15 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         self._running = True
 
         devices = sd.query_devices()
-        print("Доступные аудиоустройства:")
+        logging.info("Доступные аудиоустройства:")
         for i, dev in enumerate(devices):
-            print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
+            logging.info(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
+        # Используем устройство ввода по умолчанию
+        device = device if device is not None else sd.default.device[0]
         if device is None or device >= len(devices):
-            print("⚠ Указано недопустимое устройство. Используется устройство по умолчанию")
-            device = sd.default.device[0]  # Устройство ввода по умолчанию
+            logging.warning("⚠ Указано недопустимое устройство. Используется устройство по умолчанию")
+            device = sd.default.device[0]
 
         device_info = devices[device]
         input_channels = device_info['max_input_channels']
@@ -32,11 +37,10 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             raise RuntimeError(f"Устройство {device_info['name']} не поддерживает входной звук")
 
         self.channels = channels if channels else min(2, input_channels)
-        print(
+        logging.info(
             f"Используется устройство: {device_info['name']} (индекс {device}), channels={self.channels}, default_samplerate={device_info['default_samplerate']}")
 
         try:
-            # Проверка поддержки параметров
             sd.check_input_settings(
                 device=device,
                 samplerate=self.sample_rate,
@@ -52,37 +56,38 @@ class MicrophoneStreamTrack(MediaStreamTrack):
                 callback=self._callback,
             )
             self.stream.start()
-            print("✅ Микрофонный поток запущен")
+            logging.info("✅ Микрофонный поток запущен")
         except Exception as e:
-            print(f"❌ Ошибка при запуске микрофонного потока: {type(e).__name__}: {e}")
+            logging.error(f"❌ Ошибка при запуске микрофонного потока: {type(e).__name__}: {e}")
             raise
 
     def _callback(self, indata, frames, time, status):
         if status:
-            print(f"🎤 callback: status={status}")
-        print(
-            f"🎤 callback: indata.shape={indata.shape}, frames={frames}, status={status}, C_CONTIGUOUS={indata.flags['C_CONTIGUOUS']}")
+            logging.warning(f"🎤 callback: status={status}")
+        logging.debug(
+            f"🎤 callback: indata.shape={indata.shape}, frames={frames}, max={np.max(np.abs(indata))}, status={status}, C_CONTIGUOUS={indata.flags['C_CONTIGUOUS']}")
         if self._running:
             self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
         try:
-            if not self._running:
-                raise RuntimeError("Микрофонный поток остановлен")
+            if not self._running or not self.stream.active:
+                raise RuntimeError("Микрофонный поток остановлен или неактивен")
             data = await self.buffer.get()
-            print(
-                f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}")
+            logging.debug(
+                f"🎙️ recv(): shape={data.shape}, max={np.max(np.abs(data))}, running={self._running}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}")
             # Преобразование стерео в моно
             if data.ndim > 1 and data.shape[1] == 2:
                 data = np.mean(data, axis=1)
             elif data.ndim > 1:
                 data = data[:, 0]
-            # Усиление сигнала (x10, с защитой от клиппинга)
-            data = np.clip(data * 10.0, -1.0, 1.0)
+            # Усиление сигнала (x20, с защитой от клиппинга)
+            data = np.clip(data * 20.0, -1.0, 1.0)
+            logging.debug(f"🎙️ После усиления: max={np.max(np.abs(data))}")
             # Преобразуем float32 в int16
             data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
             data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.int16)
-            print(
+            logging.debug(
                 f"🎙️ После обработки: shape={data.shape}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}, dtype={data.dtype}")
 
             try:
@@ -92,18 +97,18 @@ class MicrophoneStreamTrack(MediaStreamTrack):
                     layout='mono'
                 )
             except Exception as e:
-                print(f"❌ Ошибка в AudioFrame: {type(e).__name__}: {e}")
+                logging.error(f"❌ Ошибка в AudioFrame: {type(e).__name__}: {e}")
                 raise
 
             frame.pts = self._timestamp
             frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
             self._timestamp += frame.samples
-            print(
+            logging.debug(
                 f"🎙️ Возвращен фрейм: samples={frame.samples}, layout={frame.layout}, sample_rate={frame.sample_rate}, format={frame.format.name}")
             return frame
         except Exception as e:
-            print(f"❌ Ошибка в MicrophoneStreamTrack.recv: {type(e).__name__}: {e}")
+            logging.error(f"❌ Ошибка в MicrophoneStreamTrack.recv: {type(e).__name__}: {e}")
             frame = AudioFrame.from_ndarray(
                 np.ascontiguousarray(np.zeros((1, self.sample_rate // 100), dtype=np.int16)),
                 format='s16',
@@ -116,9 +121,10 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             return frame
 
     def stop(self):
-        print("🛑 Вызов stop() из:", traceback.format_stack())
+        logging.info("🛑 Вызов stop() из: %s", ''.join(traceback.format_stack()[:-1]))
         self._running = False
         if hasattr(self, 'stream') and self.stream:
-            self.stream.stop()
+            if self.stream.active:
+                self.stream.stop()
             self.stream.close()
-            print("🛑 Микрофонный поток остановлен")
+            logging.info("🛑 Микрофонный поток остановлен")

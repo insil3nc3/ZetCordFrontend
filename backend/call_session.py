@@ -4,13 +4,16 @@ import sounddevice as sd
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
 from aiortc.contrib.media import MediaStreamError
 from backend.microphone_stream import MicrophoneStreamTrack
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class CallSession:
     def __init__(self, send_ice_callback, audio_manager, audio_device=None):
         self.pc = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
-        self.audio_device = audio_device if audio_device else 0
+        self.audio_device = audio_device
         self.microphone = None
         self.remote_track = None
         self.call_active = False
@@ -20,66 +23,56 @@ class CallSession:
         try:
             self.pc = RTCPeerConnection()
             devices = sd.query_devices()
-            print("Доступные аудиоустройства:")
+            logging.info("Доступные аудиоустройства:")
             for i, dev in enumerate(devices):
-                print(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
+                logging.info(f"{i}: {dev['name']} (in:{dev['max_input_channels']} out:{dev['max_output_channels']})")
 
-            # Выбираем устройство с входными каналами
-            selected_device = None
-            if self.audio_device is not None:
-                device_info = sd.query_devices(self.audio_device)
-                if device_info['max_input_channels'] >= 1:
-                    selected_device = self.audio_device
-                else:
-                    print(f"Устройство с индексом {self.audio_device} не поддерживает входной звук")
-            if selected_device is None:
-                for i, dev in enumerate(devices):
-                    if dev['max_input_channels'] >= 1:
-                        selected_device = i
-                        break
-                else:
+            # Используем устройство ввода по умолчанию
+            selected_device = self.audio_device if self.audio_device is not None else sd.default.device[0]
+            if selected_device is None or selected_device >= len(devices):
+                selected_device = next((i for i, d in enumerate(devices) if d['max_input_channels'] >= 1), None)
+                if selected_device is None:
                     raise ValueError("Не найдено устройство с поддержкой входного звука")
 
             self.audio_device = selected_device
             device_info = sd.query_devices(self.audio_device)
-            print(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
+            logging.info(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
             channels = min(2, device_info['max_input_channels'])
             try:
                 self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
             except Exception as e:
                 raise RuntimeError(f"Не удалось создать MicrophoneStreamTrack: {e}")
 
-            # Проверяем существующие отправители
             existing_sender = None
             for sender in self.pc.getSenders():
-                if sender.track:  # Учитываем только отправители с действительным треком
+                if sender.track:
                     existing_sender = sender
                     break
             if existing_sender:
                 try:
                     asyncio.get_event_loop().run_until_complete(existing_sender.replaceTrack(self.microphone))
-                    print(f"📡 RTCRtpSender обновлен: track={self.microphone}, stream_id={existing_sender._stream_id}")
+                    logging.info(f"📡 RTCRtpSender обновлен: track={self.microphone}, stream_id={existing_sender._stream_id}")
                 except Exception as e:
-                    print(f"Ошибка при замене трека в _initialize: {type(e).__name__}: {e}")
+                    logging.error(f"Ошибка при замене трека в _initialize: {type(e).__name__}: {e}")
                     sender = self.pc.addTrack(self.microphone)
-                    print(f"📡 RTCRtpSender добавлен вместо замены: track={sender.track}, stream_id={sender._stream_id}")
+                    logging.info(f"📡 RTCRtpSender добавлен вместо замены: track={sender.track}, stream_id={sender._stream_id}")
             else:
                 sender = self.pc.addTrack(self.microphone)
-                print(f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
+                logging.info(f"📡 RTCRtpSender добавлен: track={sender.track}, stream_id={sender._stream_id}")
             self.pc.on("icecandidate", self.on_icecandidate)
-            self.pc.on("[0mtrack", self._handle_track)
+            self.pc.on("track", self._handle_track)
             self.pc.on("connectionstatechange", self.on_connectionstatechange)
-            self.pc.on("datachannel", lambda event: print(f"Получен DataChannel: {event.channel.label}"))
-            self.pc.on("iceconnectionstatechange", lambda: print(f"ICE connection state: {self.pc.iceConnectionState}"))
-            self.pc.on("signalingstatechange", lambda: print(f"Signaling state: {self.pc.signalingState}"))
-            print("CallSession инициализирован")
+            self.pc.on("datachannel", lambda event: logging.info(f"Получен DataChannel: {event.channel.label}"))
+            self.pc.on("iceconnectionstatechange", lambda: logging.info(f"ICE connection state: {self.pc.iceConnectionState}"))
+            self.pc.on("signalingstatechange", lambda: logging.info(f"Signaling state: {self.pc.signalingState}"))
+            logging.info("CallSession инициализирован")
         except Exception as e:
-            print(f"Ошибка при инициализации CallSession: {type(e).__name__}: {e}")
+            logging.error(f"Ошибка при инициализации CallSession: {type(e).__name__}: {e}")
             asyncio.create_task(self.cleanup())
             raise
 
     def _handle_track(self, track):
-        print(f"Получен трек: {track.kind}, id={track.id}")
+        logging.info(f"Получен трек: {track.kind}, id={track.id}, readyState={track.readyState}")
         if track.kind == "audio":
             self.remote_track = track
             self.call_active = True
@@ -88,26 +81,27 @@ class CallSession:
     async def _receive_audio(self, track):
         try:
             self.audio_manager.start_output_stream()
-            print("🔁 Начат приём аудиофреймов")
+            logging.info("🔁 Начат приём аудиофреймов")
             timeout = 10
             elapsed = 0
             while self.pc.connectionState != "connected" and elapsed < timeout:
-                print(f"⏳ Ожидание соединения... (текущее: {self.pc.connectionState})")
+                logging.info(f"⏳ Ожидание соединения... (текущее: {self.pc.connectionState})")
                 await asyncio.sleep(0.1)
                 elapsed += 0.1
             if self.pc.connectionState != "connected":
                 raise RuntimeError(f"Не удалось установить соединение: {self.pc.connectionState}")
-            print("✅ Соединение установлено")
+            logging.info("✅ Соединение установлено")
             while self.call_active and self.pc and self.pc.connectionState == "connected" and track.readyState == "live":
                 try:
                     frame = await track.recv()
                     audio_data = frame.to_ndarray()
-                    print(
+                    logging.debug(
                         f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}, samples={frame.samples}, sample_rate={frame.sample_rate}")
                     if audio_data.dtype != np.float32:
-                        audio_data = audio_data.astype(np.float32)
-                    # Усиление сигнала (x10, с защитой от клиппинга)
-                    audio_data = np.clip(audio_data * 10.0, -32768, 32767).astype(np.float32) / 32768.0
+                        audio_data = audio_data.astype(np.float32) / 32768.0
+                    # Усиление сигнала (x20, с защитой от клиппинга)
+                    audio_data = np.clip(audio_data * 20.0, -1.0, 1.0)
+                    logging.debug(f"🎧 После усиления: max={np.max(np.abs(audio_data))}")
                     if audio_data.ndim == 1:
                         audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
                     elif audio_data.shape[1] == 1:
@@ -115,56 +109,60 @@ class CallSession:
                     max_amplitude = np.max(np.abs(audio_data))
                     if max_amplitude > 1.0:
                         audio_data = audio_data / max_amplitude
-                        print(f"Нормализация выполнена: новый max={np.max(np.abs(audio_data))}")
+                        logging.debug(f"Нормализация выполнена: новый max={np.max(np.abs(audio_data))}")
                     self.audio_manager.play_audio_chunk(audio_data)
                 except MediaStreamError:
-                    print("❌ Удаленный аудиопоток завершился")
+                    logging.warning("❌ Удаленный аудиопоток завершился")
                     break
                 except Exception as e:
-                    print(f"❌ Ошибка при приёме аудио: {type(e).__name__}: {e}")
+                    logging.error(f"❌ Ошибка при приёме аудио: {type(e).__name__}: {e}")
                     if isinstance(e, (StopAsyncIteration, asyncio.CancelledError)):
-                        print("Завершение цикла получения аудио")
+                        logging.info("Завершение цикла получения аудио")
                         break
                     await asyncio.sleep(0.05)
                     continue
         except Exception as e:
-            print(f"❌ Критическая ошибка в _receive_audio: {type(e).__name__}: {e}")
+            logging.error(f"❌ Критическая ошибка в _receive_audio: {type(e).__name__}: {e}")
         finally:
-            print("🛑 Завершена обработка аудиотрека")
+            logging.info("🛑 Завершена обработка аудиотрека")
             if self.call_active:
                 self.call_active = False
                 await self.cleanup()
 
     async def cleanup(self):
-        print(
+        logging.info(
             f"🧹 cleanup() вызван, call_active={self.call_active}, состояние={self.pc.connectionState if self.pc else 'нет соединения'}")
         if self.microphone:
-            print("Остановка микрофона")
+            logging.info("Остановка микрофона")
             self.microphone.stop()
             self.microphone = None
         if self.remote_track:
-            print("Остановка удаленного трека")
-            self.remote_track.stop()
+            logging.info("Остановка удаленного трека")
+            try:
+                self.remote_track.stop()
+            except Exception as e:
+                logging.error(f"Ошибка при остановке remote_track: {type(e).__name__}: {e}")
             self.remote_track = None
         if self.pc:
-            print("Закрытие RTCPeerConnection")
+            logging.info("Закрытие RTCPeerConnection")
             try:
                 await self.pc.close()
             except Exception as e:
-                print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
+                logging.error(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
             self.pc = None
         self.audio_manager.stop_output_stream()
-        print("Соединение закрыто")
+        self.audio_manager.stop_microphone_stream()
+        logging.info("Соединение закрыто")
 
     async def close_this(self):
-        print("Вызов CallSession.close")
+        logging.info("Вызов CallSession.close")
         self.call_active = False
         await self.cleanup()
 
     def on_connectionstatechange(self):
         if self.pc:
             state = self.pc.connectionState
-            print(f"Состояние соединения: {state}")
+            logging.info(f"Состояние соединения: {state}")
             if state in ["failed", "closed"] and self.call_active:
                 self.call_active = False
                 asyncio.create_task(self.cleanup())
@@ -179,17 +177,17 @@ class CallSession:
             for sender in self.pc.getSenders():
                 if sender.track == self.microphone:
                     track_already_added = True
-                    print(f"📡 Трек уже добавлен в RTCRtpSender: track={self.microphone}, stream_id={sender._stream_id}")
+                    logging.info(f"📡 Трек уже добавлен в RTCRtpSender: track={self.microphone}, stream_id={sender._stream_id}")
                     break
             if not track_already_added:
                 sender = self.pc.addTrack(self.microphone)
-                print(f"📡 RTCRtpSender добавлен в create_offer: track={sender.track}, stream_id={sender._stream_id}")
+                logging.info(f"📡 RTCRtpSender добавлен в create_offer: track={sender.track}, stream_id={sender._stream_id}")
             offer = await self.pc.createOffer()
             await self.pc.setLocalDescription(offer)
-            print("Оффер создан")
+            logging.info("Оффер создан")
             return self.pc.localDescription
         except Exception as e:
-            print(f"Ошибка при создании оффера: {type(e).__name__}: {e}")
+            logging.error(f"Ошибка при создании оффера: {type(e).__name__}: {e}")
             raise
 
     async def create_answer(self):
@@ -200,17 +198,17 @@ class CallSession:
             for sender in self.pc.getSenders():
                 if sender.track == self.microphone:
                     track_already_added = True
-                    print(f"📡 Трек уже добавлен в RTCRtpSender: track={self.microphone}, stream_id={sender._stream_id}")
+                    logging.info(f"📡 Трек уже добавлен в RTCRtpSender: track={self.microphone}, stream_id={sender._stream_id}")
                     break
             if not track_already_added:
                 sender = self.pc.addTrack(self.microphone)
-                print(f"📡 RTCRtpSender добавлен в create_answer: track={sender.track}, stream_id={sender._stream_id}")
+                logging.info(f"📡 RTCRtpSender добавлен в create_answer: track={sender.track}, stream_id={sender._stream_id}")
             answer = await self.pc.createAnswer()
             await self.pc.setLocalDescription(answer)
-            print("Ответ создан")
+            logging.info("Ответ создан")
             return self.pc.localDescription
         except Exception as e:
-            print(f"Ошибка при создании ответа: {type(e).__name__}: {e}")
+            logging.error(f"Ошибка при создании ответа: {type(e).__name__}: {e}")
             raise
 
     async def set_remote_description(self, desc):
@@ -219,11 +217,11 @@ class CallSession:
                 if "type" not in desc or "sdp" not in desc:
                     raise ValueError("Словарь SDP должен содержать ключи 'type' и 'sdp'")
                 desc = RTCSessionDescription(sdp=desc["sdp"], type=desc["type"])
-            print(f"📥 Установка удаленного описания: type={desc.type}, sdp={desc.sdp[:100]}...")
+            logging.info(f"📥 Установка удаленного описания: type={desc.type}, sdp={desc.sdp[:100]}...")
             await self.pc.setRemoteDescription(desc)
-            print(f"✅ Установлено удаленное описание типа: {desc.type}")
+            logging.info(f"✅ Установлено удаленное описание типа: {desc.type}")
         except Exception as e:
-            print(f"❌ Ошибка при установке удаленного описания: {type(e).__name__}: {e}")
+            logging.error(f"❌ Ошибка при установке удаленного описания: {type(e).__name__}: {e}")
             raise
 
     async def on_icecandidate(self, event):
@@ -236,7 +234,7 @@ class CallSession:
                     "sdpMLineIndex": event.candidate.sdpMLineIndex,
                 }
             })
-            print(f"Отправлен ICE-кандидат: {event.candidate.candidate[:50]}...")
+            logging.info(f"Отправлен ICE-кандидат: {event.candidate.candidate[:50]}...")
 
     async def add_ice_candidate(self, candidate):
         try:
@@ -246,6 +244,6 @@ class CallSession:
                 sdpMLineIndex=candidate["sdpMLineIndex"]
             )
             await self.pc.addIceCandidate(ice_candidate)
-            print("Добавлен ICE-кандидат")
+            logging.info("Добавлен ICE-кандидат")
         except Exception as e:
-            print(f"Ошибка при добавлении ICE-кандидата: {type(e).__name__}: {e}")
+            logging.error(f"Ошибка при добавлении ICE-кандидата: {type(e).__name__}: {e}")
