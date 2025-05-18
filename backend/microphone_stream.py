@@ -72,48 +72,60 @@ class MicrophoneStreamTrack(MediaStreamTrack):
         try:
             if not self._running or not self.stream.active:
                 raise RuntimeError("Микрофонный поток остановлен или неактивен")
+
+            # Получаем данные из буфера
             data = await self.buffer.get()
-            logging.debug(
-                f"🎙️ recv(): shape={data.shape}, max={np.max(np.abs(data))}, running={self._running}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}")
+
+            # Логирование сырых данных для отладки
+            logging.debug(f"Raw audio data type: {type(data)}, shape: {getattr(data, 'shape', 'no shape')}")
+
+            # Гарантируем, что данные являются numpy массивом
+            if not isinstance(data, np.ndarray):
+                data = np.frombuffer(data.tobytes() if hasattr(data, 'tobytes') else bytes(data),
+                                     dtype=np.float32)
+                data = data.reshape(-1, 1)  # Преобразуем в 2D массив
+
+            # Обработка многоканального аудио
             if data.ndim > 1 and data.shape[1] == 2:
-                data = np.mean(data, axis=1)
+                data = np.mean(data, axis=1)  # Микшируем стерео в моно
             elif data.ndim > 1:
-                data = data[:, 0]
+                data = data[:, 0]  # Берем первый канал
+
+            # Нормализация и усиление
             data = np.clip(data * 20.0, -1.0, 1.0)
-            logging.debug(f"🎙️ После усиления: max={np.max(np.abs(data))}")
+
+            # Конвертация в 16-битный формат
             data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
-            data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.int16)
-            logging.debug(
-                f"🎙️ После обработки: shape={data.shape}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}, dtype={data.dtype}")
+            data = np.ascontiguousarray(data.reshape(1, -1))
 
-            try:
-                frame = AudioFrame.from_ndarray(
-                    data,
-                    format='s16',
-                    layout='mono'
-                )
-            except Exception as e:
-                logging.error(f"❌ Ошибка в AudioFrame: {type(e).__name__}: {e}")
-                raise
+            # Создаем аудиофрейм с явным указанием параметров
+            frame = AudioFrame.from_ndarray(
+                data,
+                format='s16',
+                layout='mono'
+            )
 
+            # Устанавливаем метаданные
             frame.pts = self._timestamp
             frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
             self._timestamp += frame.samples
-            logging.debug(
-                f"🎙️ Возвращен фрейм: samples={frame.samples}, layout={frame.layout}, sample_rate={frame.sample_rate}, format={frame.format.name}")
+
             return frame
+
         except Exception as e:
-            logging.error(f"❌ Ошибка в MicrophoneStreamTrack.recv: {type(e).__name__}: {e}")
+            logging.error(f"Error in MicrophoneStreamTrack.recv: {e}", exc_info=True)
+            # Возвращаем тихий фрейм при ошибке
+            silent_data = np.zeros((1, self.sample_rate // 100), dtype=np.int16)
             frame = AudioFrame.from_ndarray(
-                np.ascontiguousarray(np.zeros((1, self.sample_rate // 100), dtype=np.int16)),
+                silent_data,
                 format='s16',
                 layout='mono'
             )
             frame.pts = self._timestamp
             frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
-            self._timestamp += frame.samples
+            self._timestamp += silent_data.shape[1]
             return frame
 
     def stop(self):

@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QObject, QEvent, QUrl, QBuffer, QIODevice, QCoreApplication, QThread, QMetaObject, Qt, \
-    pyqtSignal
+    pyqtSignal, pyqtSlot
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio, QAudioOutput, QMediaDevices
 import sounddevice as sd
 import numpy as np
@@ -17,14 +17,15 @@ class InitializeAudioEvent(QEvent):
 
 
 class AudioManager(QObject):
+    # Правильное объявление сигналов (на уровне класса)
     play_ringtone_signal = pyqtSignal(str, bool)
     play_notification_signal = pyqtSignal(str)
     play_audio_chunk_signal = pyqtSignal(np.ndarray)
+    init_signal = pyqtSignal()  # Добавлен сигнал для инициализации
 
     def __init__(self, sample_rate=44100, channels=2, parent=None):
         super().__init__(parent)
 
-        # Проверяем, что QApplication существует
         if not QCoreApplication.instance():
             raise RuntimeError("QApplication must be created before AudioManager")
 
@@ -36,22 +37,32 @@ class AudioManager(QObject):
         self.audio_output = None
         self.audio_buffer = None
 
-        # Инициализация медиа-плееров (перенесено из отдельного метода)
-        self.ringtone_player = QMediaPlayer()
-        self.ringtone_output = QAudioOutput()
-        self.ringtone_player.setAudioOutput(self.ringtone_output)
+        # Подключаем сигналы (должно быть после super().__init__())
+        self.init_signal.connect(self._init_media_players)
+        self.play_ringtone_signal.connect(self._play_ringtone)
+        self.play_notification_signal.connect(self._play_notification)
+        self.play_audio_chunk_signal.connect(self._play_audio_chunk_handler)
 
-        self.notification_player = QMediaPlayer()
-        self.notification_output = QAudioOutput()
-        self.notification_player.setAudioOutput(self.notification_output)
+        # Запускаем инициализацию через сигнал
+        self.init_signal.emit()
 
         self._output_stopped_intentionally = False
         self._pending_audio_chunks = []
 
-        # Подключаем сигналы
-        self.play_ringtone_signal.connect(self._play_ringtone)
-        self.play_notification_signal.connect(self._play_notification)
-        self.play_audio_chunk_signal.connect(self._play_audio_chunk_handler)
+    @pyqtSlot()
+    def _init_media_players(self):
+        """Инициализация медиа-плееров"""
+        try:
+            self.ringtone_player = QMediaPlayer()
+            self.ringtone_output = QAudioOutput()
+            self.ringtone_player.setAudioOutput(self.ringtone_output)
+
+            self.notification_player = QMediaPlayer()
+            self.notification_output = QAudioOutput()
+            self.notification_player.setAudioOutput(self.notification_output)
+            logging.info("Медиа-плееры инициализированы")
+        except Exception as e:
+            logging.error(f"Ошибка инициализации медиа-плееров: {e}")
 
     # Все методы ниже автоматически будут вызываться в главном потоке
 
@@ -219,7 +230,11 @@ class AudioManager(QObject):
                 blocksize=1024,
                 callback=callback,
                 device=device,
-                dtype='float32'
+                dtype='float32',
+                extra_settings={
+                    'encoding': 'latin1',
+                    'dtype_unicode': 'float32'
+                }
             )
             self.input_stream.start()
             logging.info(f"🎙️ Микрофонный поток запущен: {device_info['name']} (каналы: {channels})")
