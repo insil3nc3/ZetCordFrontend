@@ -16,12 +16,10 @@ from screens.utils.default_avatar import default_ava_path
 from screens.utils.screen_style_sheet import load_custom_font
 from screens.utils.search_screen_profile_widget import SearchScreenProfileWidget
 
-
 class CallWidget(QWidget):
     def __init__(self, receiver_id, receiver_name, receiver_avatar_path, cur_user_info, audio, set_calling_status_callback, send_via_ws):
         super().__init__()
-        self.call_active = False  # состояние звонка
-        # ========== Initialization ==========
+        self.call_active = False
         self.receiver_id = receiver_id
         self.receiver_name = receiver_name
         self.receiver_avatar_path = receiver_avatar_path
@@ -44,47 +42,34 @@ class CallWidget(QWidget):
         bottom_layout = QHBoxLayout()
         bottom_container.setLayout(bottom_layout)
         bottom_container.setFixedHeight(90)
-        # ===================================
 
-        # ========== Stylization ==========
         container_style_sheet = """
             background-color: #1f1b24;
             border-radius: 10px;
         """
-
         top_container.setStyleSheet(container_style_sheet)
-
         bottom_container.setStyleSheet(container_style_sheet)
-        # =================================
 
-        # ========== Font Setup ==========
         font = load_custom_font(12)
         if font:
             self.setFont(font)
-        # ===============================
-        # ========== Call Layout ==========
-        call_layout = QVBoxLayout()
 
+        call_layout = QVBoxLayout()
         call_layout.addStretch()
 
-        # ========== Avatar ==========
         self.avatar = QLabel(self)
         self.avatar.setFixedSize(120, 120)
         self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.avatar.setStyleSheet("background: transparent;")
         call_layout.addWidget(self.avatar, alignment=Qt.AlignmentFlag.AlignCenter)
-        # ============================
 
-        # ========== Nickname ==========
         self.nickname = QLabel()
         self.nickname.setFont(QFont("inter", 20, QFont.Weight.Bold))
         self.nickname.setContentsMargins(5, 5, 5, 5)
         self.nickname.setStyleSheet("background-color: #7A4165;")
         call_layout.addWidget(self.nickname, alignment=Qt.AlignmentFlag.AlignCenter)
         call_layout.addStretch()
-        # ==============================
 
-        # ========== Call Button ==========
         self.call_button = QPushButton()
         self.call_button.setFixedSize(90, 90)
         self.call_button.setStyleSheet("background-color: #3ba55d; border-radius: 45;")
@@ -94,12 +79,9 @@ class CallWidget(QWidget):
         self.call_button.setIconSize(QSize(70, 70))
         call_layout.addWidget(self.call_button, alignment=Qt.AlignmentFlag.AlignCenter)
         call_layout.addStretch()
-        # =================================
 
         top_layout.addLayout(call_layout)
-        # =================================
 
-        # ========== Call Members Layout ==========
         members_container = QWidget()
         members_container.setStyleSheet("background-color: #110f12; border-radius: 15px;")
         call_members_layout = QVBoxLayout()
@@ -115,8 +97,6 @@ class CallWidget(QWidget):
 
         self.set_cur_user_info()
         self.set_receiver_info()
-        # =========================================
-
         self.fill_data()
         main_layout.addWidget(top_container)
         main_layout.addWidget(bottom_container)
@@ -153,6 +133,7 @@ class CallWidget(QWidget):
             print("📤 Оффер отправлен")
         except Exception as e:
             print(f"❌ Ошибка в offer_to_call: {type(e).__name__}: {e}")
+            self.end_call()
             raise
 
     def end_call(self):
@@ -163,14 +144,14 @@ class CallWidget(QWidget):
         if self.call_session:
             print(f"🛑 Закрытие call_session, call_session.call_active={self.call_session.call_active}")
             asyncio.create_task(self.call_session.close_this())
+            self.send_via_ws({"type": "end_call", "to.ConcurrentDictionary`2[System.String,System.String]": self.receiver_id})
         else:
             print("⚠️ call_session не инициализирован, пропуск close()")
-
+        self.call_session = None
 
     async def on_ice_candidate_received(self, candidate):
         if self.call_session and self.call_session.pc:
-            # добавляем кандидат в RTCPeerConnection
-            await self.call_session.pc.addIceCandidate(candidate)
+            await self.call_session.add_ice_candidate(candidate)
 
     def set_cur_user_info(self):
         data = {"nickname": self.cur_user_info["nickname"], "avatar_path": find_image_path_by_number("avatar", 1)}
@@ -183,18 +164,17 @@ class CallWidget(QWidget):
     def toggle_call_state(self):
         if not self.call_active:
             self.call_active = True
-            self.call_button.setStyleSheet("background-color: #ed4245; border-radius: 45;")  # меняем стиль на "отбой"
-            self.call_button.setIcon(QIcon("icons/phone-disconnect.svg"))  # иконка "завершить звонок"
+            self.call_button.setStyleSheet("background-color: #ed4245; border-radius: 45;")
+            self.call_button.setIcon(QIcon("icons/phone-disconnect.svg"))
             self.call_user()
         else:
             self.call_active = False
-            self.call_button.setStyleSheet("background-color: #3ba55d; border-radius: 45;")  # стиль обратно на "позвонить"
-            self.call_button.setIcon(QIcon("icons/phone-call.svg"))  # иконка "начать звонок"
+            self.call_button.setStyleSheet("background-color: #3ba55d; border-radius: 45;")
+            self.call_button.setIcon(QIcon("icons/phone-call.svg"))
             self.end_call()
 
     def call_user(self):
         print(f"Начинается звонок пользователю {self.receiver_name}")
-        # тут логика начала звонка
         asyncio.create_task(self.offer_to_call())
         self.audio.play_ringtone("sounds/zetcord.mp3")
         self.set_calling_status(True)
@@ -211,5 +191,5 @@ class CallWidget(QWidget):
             print("✅ Ответ обработан")
         except Exception as e:
             print(f"❌ Ошибка в on_answer_received: {type(e).__name__}: {e}")
+            self.end_call()
             raise
-

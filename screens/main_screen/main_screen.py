@@ -23,11 +23,9 @@ from screens.main_screen.web_socket import WebSocketClient
 from screens.utils.screen_style_sheet import screen_style, load_custom_font
 from screens.utils.list_utils import configure_list_widget_no_hscroll
 
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        # ========== Initialize variables ==========
         self.user2_id = None
         self.chat_widget = None
         self.user_start_data = None
@@ -38,42 +36,31 @@ class MainWindow(QMainWindow):
         self.cur_user_avatar_path = None
         self.incoming_call = None
         self.audio = AudioManager()
-        # =========================================
-
         self.showMaximized()
 
-        # ========== Main window setup ==========
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout()
         central_widget.setLayout(main_layout)
         self.setStyleSheet(screen_style)
-        # ======================================
 
-        # ========== WebSocket client ==========
         self.client = WebSocketClient(token=token_manager.get_access_token())
         self.client.message_received.connect(self.handle_ws_message)
         self.client.connected.connect(self.get_init_data)
         self.client.connect()
-        # =====================================
 
-        # ========== Application palette ==========
         palette = QPalette()
         palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 0, 0, 0))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
         QApplication.instance().setPalette(palette)
-        # ========================================
 
-        # ========== Font setup ==========
         font = load_custom_font(12)
         if font:
             self.setFont(font)
-        # ===============================
 
-        # ========== Profile and chats container ==========
         chats_with_profile_layout = QVBoxLayout()
-        chats_with_profile_layout.setSpacing(10)  # Добавлен отступ сверху списков
-        chats_with_profile_layout.setContentsMargins(0, 10, 0, 0)  # Отступ сверху
+        chats_with_profile_layout.setSpacing(10)
+        chats_with_profile_layout.setContentsMargins(0, 10, 0, 0)
 
         self.profile_widget = MyProfile()
         self.cur_user_avatar_path = self.profile_widget.avatar_path
@@ -88,9 +75,7 @@ class MainWindow(QMainWindow):
         chats_with_profile_layout_widget = QWidget()
         chats_with_profile_layout_widget.setLayout(chats_with_profile_layout)
         main_layout.addWidget(chats_with_profile_layout_widget, alignment=Qt.AlignmentFlag.AlignLeft)
-        # ================================================
 
-        # ========== Groups section ==========
         groups_layout = QVBoxLayout()
         groups_layout.setContentsMargins(0, 0, 0, 0)
         groups_layout.setSpacing(0)
@@ -122,14 +107,11 @@ class MainWindow(QMainWindow):
         groups_layout.addWidget(self.top_group_container)
 
         self.groups_list = QListWidget()
-
-
         self.create_group = StyledAnimatedButton(text="+", btn_style="positive", font_size=16, height=50, width=80)
 
         groups_layout.addWidget(self.top_group_container)
         groups_layout.addWidget(self.groups_list)
 
-        # Bottom container with "+" button
         self.bottom_group_container = QWidget()
         bottom_group_layout = QHBoxLayout()
         bottom_group_layout.setContentsMargins(0, 10, 0, 10)
@@ -146,9 +128,7 @@ class MainWindow(QMainWindow):
             }    
             """)
         groups_layout.addWidget(self.bottom_group_container)
-        # ===================================
 
-        # ========== Dialogs section ==========
         dialogs_layout = QVBoxLayout()
         dialogs_layout.setContentsMargins(0, 0, 0, 0)
         dialogs_layout.setSpacing(0)
@@ -179,23 +159,16 @@ class MainWindow(QMainWindow):
             }    
             """)
 
-
-
         self.dialogs_list = QListWidget()
         self.dialogs_list.setObjectName("dialogsList")
 
         dialogs_layout.addWidget(self.top_dialog_container)
         dialogs_layout.addWidget(self.dialogs_list)
         self.dialogs_list.itemClicked.connect(self.on_dialog_item_clicked)
-        # ====================================
 
-        # ========== Chat area ==========
         self.chat_layout = QVBoxLayout()
         main_layout.addLayout(self.chat_layout, 2)
 
-        # ==============================
-
-        # ========== List widgets configuration ==========
         configure_list_widget_no_hscroll(self.groups_list)
         configure_list_widget_no_hscroll(self.dialogs_list)
 
@@ -205,9 +178,7 @@ class MainWindow(QMainWindow):
         self.dialogs_list.viewport().installEventFilter(self)
         self.groups_list.clicked.connect(self.on_groups_list_clicked)
         self.dialogs_list.clicked.connect(self.on_dialogs_list_clicked)
-        # ===============================================
 
-        # ========== Size constraints ==========
         self.dialogs_list.setMinimumWidth(200)
         self.dialogs_list.setMaximumWidth(200)
         self.search_button.setMinimumWidth(150)
@@ -218,9 +189,7 @@ class MainWindow(QMainWindow):
         self.search_group.setMaximumWidth(90)
         self.create_group.setMinimumWidth(80)
         self.create_group.setMaximumWidth(80)
-        # =====================================
 
-        # ========== Stylesheets ==========
         self.dialogs_list.setStyleSheet("""
             QListWidget {
                 background-color: #110f12;
@@ -277,15 +246,11 @@ class MainWindow(QMainWindow):
                 outline: none;
             }
         """)
-        # ================================
 
-        # ========== Cursors ==========
         self.groups_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.dialogs_list.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        # =============================
 
         self.call_layout = QVBoxLayout()
-
         main_layout.addLayout(self.call_layout, 1)
 
     def set_active_list(self, list_name):
@@ -509,18 +474,22 @@ class MainWindow(QMainWindow):
                     self.incoming_call = IncomingCallWidget(data, self.audio, self.send_via_ws, self.call_accept)
                     self.incoming_call.show()
             elif data["type"] == "answer":
-                sdp = data.get("answer")  # Или другой ключ, в зависимости от структуры
+                sdp = data.get("answer")
                 if not sdp:
                     raise ValueError("Ответ не содержит SDP")
                 await self.call_widget.on_answer_received(sdp)
+                self.call_widget.audio.stop_ringtone()
             elif data["type"] == "ice_candidate":
-                if self.call_widget and self.call_widget.call_session:
+                if self.call_widget and self.call_session:
                     candidate = data.get("candidate")
                     if candidate:
-                        await self.call_widget.call_session.add_ice_candidate(candidate)
-
-
-
+                        await self.call_widget.on_ice_candidate_received(candidate)
+            elif data["type"] == "end_call":
+                if self.call_widget:
+                    self.call_widget.end_call()
+                    self.call_widget.deleteLater()
+                    self.call_widget = None
+                    self.call = False
         except json.JSONDecodeError as e:
             print("ошибка при получении вебсокет сообщения:", e)
             raise
@@ -530,22 +499,16 @@ class MainWindow(QMainWindow):
             self.call_widget.audio.stop_ringtone()
 
     def eventFilter(self, obj, event):
-        # ========== Обработка кликов по пустой области ==========
         if event.type() == QEvent.Type.MouseButtonPress:
             if obj == self.groups_list.viewport():
-                # print("Groups list clicked (empty area)")
                 self.on_groups_list_clicked()
             elif obj == self.dialogs_list.viewport():
-                # print("Dialogs list clicked (empty area)")
                 self.on_dialogs_list_clicked()
         return super().eventFilter(obj, event)
-        # ==============================
 
     def on_dialog_item_clicked(self, item):
-        # ========== Обработка клика по элементу dialogs_list ==========
         self.cur_widget = self.dialogs_list.itemWidget(item)
         if not self.cur_widget:
-            # print("Ошибка: Виджет не найден для элемента")
             return
         try:
             chat_id = self.cur_widget.chat_id
@@ -553,7 +516,6 @@ class MainWindow(QMainWindow):
             self.open_chat(chat_id, self.cur_widget.user_id, self.cur_widget.username)
             self.open_call_menu(self.cur_widget.user_id, self.cur_widget.username, self.cur_widget.ava, "ababa")
         except AttributeError:
-            # print("Ошибка: Атрибут chat_id не найден в виджете")
             return
 
     def open_call_menu(self, receiver_id, receiver_name, receiver_avatar_path, users_data):
@@ -593,7 +555,6 @@ class MainWindow(QMainWindow):
         self.client.send_json(message_data)
 
     async def fill_dialog_list(self):
-        # ========== Заполнение dialogs_list ==========
         dialogs = self.user_start_data['chats_data']['chats']
         if not dialogs:
             return
@@ -615,8 +576,6 @@ class MainWindow(QMainWindow):
                 chat_id=dialog.get("_id"),
                 user_id=self.user2_id
             )
-        # ==============================
-        # Сохраняем ссылку на виджеты для управления
         self.item_widgets = [self.dialogs_list.itemWidget(self.dialogs_list.item(i)) for i in
                              range(self.dialogs_list.count())]
 
@@ -641,7 +600,7 @@ class MainWindow(QMainWindow):
             if widget and getattr(widget, "user_id", None) == target_id:
                 return index
             widget.set_default_style()
-        return -1  # если не найдено
+        return -1
 
     def focus_to_widget(self, target):
         index = self.get_list_index(target)
