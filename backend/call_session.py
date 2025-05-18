@@ -34,7 +34,8 @@ class CallSession:
             channels = min(2, device_info['max_input_channels'])
             self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels)
             sender = self.pc.addTrack(self.microphone)
-            print(f"📡 RTCRtpSender добавлен: id={sender.id}, track={sender.track}, readyState={sender.readyState}")
+            print(
+                f"📡 RTCRtpSender добавлен: track={sender.track}, readyState={sender.readyState}, stream_id={sender._stream_id}")
             self.pc.addTrack(self.microphone)
             self.pc.on("icecandidate", self.on_icecandidate)
             self.pc.on("track", self._handle_track)
@@ -45,7 +46,11 @@ class CallSession:
             print("CallSession инициализирован")
         except Exception as e:
             print(f"Ошибка при инициализации CallSession: {type(e).__name__}: {e}")
-            asyncio.create_task(self.cleanup())
+            # Не вызываем cleanup() для некритичных ошибок
+            if isinstance(e, ValueError):  # Например, отсутствие устройства ввода
+                asyncio.create_task(self.cleanup())
+            else:
+                print("Инициализация продолжается несмотря на ошибку")
 
     def _handle_track(self, track):
         print(f"Получен трек: {track.kind}, id={track.id}")
@@ -113,14 +118,14 @@ class CallSession:
             if self.pc:
                 print("Закрытие RTCPeerConnection")
                 try:
-                    await self.pc.close()
+                    await self.pc.close_this()
                 except Exception as e:
                     print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
                 self.pc = None
             self.audio_manager.stop_output_stream()
             print("Соединение закрыто")
 
-    async def close(self):
+    async def close_this(self):
         print("Вызов CallSession.close")
         self.call_active = False
         await self.cleanup()
@@ -135,8 +140,10 @@ class CallSession:
 
     async def create_offer(self):
         try:
-            if not self.pc or not self.microphone:
-                raise RuntimeError("RTCPeerConnection или микрофон не инициализированы")
+            if not self.pc:
+                raise RuntimeError("RTCPeerConnection не инициализирован или закрыт")
+            if not self.microphone:
+                raise RuntimeError("Микрофон не инициализирован")
             offer = await self.pc.createOffer()
             await self.pc.setLocalDescription(offer)
             print("Оффер создан")

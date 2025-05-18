@@ -48,11 +48,13 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             print(f"❌ Ошибка при запуске микрофонного потока: {e}")
             raise
 
-    def _callback(self, indata, frames, time_info, status):
-        if not self._running:
-            return
-        print(f"🎤 callback: indata.shape={indata.shape}, frames={frames}, status={status}")
-        self.buffer.put_nowait(indata.copy())
+    def _callback(self, indata, frames, time, status):
+        if status:
+            print(f"🎤 callback: status={status}")
+        print(
+            f"🎤 callback: indata.shape={indata.shape}, frames={frames}, status={status}, C_CONTIGUOUS={indata.flags['C_CONTIGUOUS']}")
+        if self._running:
+            self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
         try:
@@ -60,10 +62,13 @@ class MicrophoneStreamTrack(MediaStreamTrack):
                 raise RuntimeError("Микрофонный поток остановлен")
             data = await self.buffer.get()
             print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}")
+            # Приведение к моно
             if data.ndim > 1 and data.shape[1] == 2:
-                data = data[:, 0]
+                data = data[:, 0]  # Берем первый канал
+            # Преобразуем в shape=(1, N) и обеспечиваем C-contiguous
+            data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.float32)
             frame = AudioFrame.from_ndarray(
-                data.reshape(-1, 1),
+                data,
                 format='flt',
                 layout='mono'
             )
@@ -74,7 +79,17 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             return frame
         except Exception as e:
             print(f"❌ Ошибка в MicrophoneStreamTrack.recv: {type(e).__name__}: {e}")
-            raise
+            # Возвращаем пустой C-contiguous фрейм
+            frame = AudioFrame.from_ndarray(
+                np.ascontiguousarray(np.zeros((1, self.sample_rate // 100), dtype=np.float32)),
+                format='flt',
+                layout='mono'
+            )
+            frame.pts = self._timestamp
+            frame.sample_rate = self.sample_rate
+            frame.time_base = Fraction(1, self.sample_rate)
+            self._timestamp += frame.samples
+            return frame
 
     def stop(self):
         print("🛑 Вызов stop() из:", traceback.format_stack())
