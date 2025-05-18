@@ -31,9 +31,17 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             raise RuntimeError(f"Устройство {devices[device]['name']} не поддерживает входной звук")
 
         self.channels = channels if channels else min(2, input_channels)
-        print(f"Используется устройство: {devices[device]['name']} (индекс {device}), channels={self.channels}")
+        print(
+            f"Используется устройство: {devices[device]['name']} (индекс {device}), channels={self.channels}, default_samplerate={devices[device]['default_samplerate']}")
 
         try:
+            # Проверка поддержки параметров
+            sd.check_input_settings(
+                device=device,
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype='float32'
+            )
             self.stream = sd.InputStream(
                 device=device,
                 samplerate=self.sample_rate,
@@ -45,7 +53,7 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             self.stream.start()
             print("✅ Микрофонный поток запущен")
         except Exception as e:
-            print(f"❌ Ошибка при запуске микрофонного потока: {e}")
+            print(f"❌ Ошибка при запуске микрофонного потока: {type(e).__name__}: {e}")
             raise
 
     def _callback(self, indata, frames, time, status):
@@ -61,28 +69,35 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             if not self._running:
                 raise RuntimeError("Микрофонный поток остановлен")
             data = await self.buffer.get()
-            print(f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}")
-            # Приведение к моно
+            print(
+                f"🎙️ recv(): пришли данные от микрофона, shape={data.shape}, running={self._running}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}")
             if data.ndim > 1 and data.shape[1] == 2:
-                data = data[:, 0]  # Берем первый канал
-            # Преобразуем в shape=(1, N) и обеспечиваем C-contiguous
-            data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.float32)
+                data = data[:, 0]
+
+            # Преобразуем float32 в int16
+            # float32 в диапазоне [-1, 1] -> int16 в диапазоне [-32768, 32767]
+            data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
+            data = np.ascontiguousarray(data.reshape(1, -1), dtype=np.int16)
+            print(
+                f"🎙️ После обработки: shape={data.shape}, C_CONTIGUOUS={data.flags['C_CONTIGUOUS']}, dtype={data.dtype}")
+
             frame = AudioFrame.from_ndarray(
                 data,
-                format='flt',
+                format='s16',
                 layout='mono'
             )
             frame.pts = self._timestamp
             frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
             self._timestamp += frame.samples
+            print(
+                f"🎙️ Возвращен фрейм: samples={frame.samples}, layout={frame.layout}, sample_rate={frame.sample_rate}, format={frame.format.name}")
             return frame
         except Exception as e:
             print(f"❌ Ошибка в MicrophoneStreamTrack.recv: {type(e).__name__}: {e}")
-            # Возвращаем пустой C-contiguous фрейм
             frame = AudioFrame.from_ndarray(
-                np.ascontiguousarray(np.zeros((1, self.sample_rate // 100), dtype=np.float32)),
-                format='flt',
+                np.ascontiguousarray(np.zeros((1, self.sample_rate // 100), dtype=np.int16)),
+                format='s16',
                 layout='mono'
             )
             frame.pts = self._timestamp

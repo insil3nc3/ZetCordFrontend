@@ -77,7 +77,7 @@ class CallSession:
                     frame = await track.recv()
                     audio_data = frame.to_ndarray(format="flt")
                     print(
-                        f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}")
+                        f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}, samples={frame.samples}, sample_rate={frame.sample_rate}")
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
                     if audio_data.ndim == 1:
@@ -105,25 +105,25 @@ class CallSession:
                 await self.cleanup()
 
     async def cleanup(self):
-        if not self.call_active:
-            print(f"🧹 cleanup() вызван, call_active={self.call_active}, состояние={self.pc.connectionState if self.pc else 'нет соединения'}")
-            if self.microphone:
-                print("Остановка микрофона")
-                self.microphone.stop()
-                self.microphone = None
-            if self.remote_track:
-                print("Остановка удаленного трека")
-                self.remote_track.stop()
-                self.remote_track = None
-            if self.pc:
-                print("Закрытие RTCPeerConnection")
-                try:
-                    await self.pc.close_this()
-                except Exception as e:
-                    print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
-                self.pc = None
-            self.audio_manager.stop_output_stream()
-            print("Соединение закрыто")
+        print(
+            f"🧹 cleanup() вызван, call_active={self.call_active}, состояние={self.pc.connectionState if self.pc else 'нет соединения'}")
+        if self.microphone:
+            print("Остановка микрофона")
+            self.microphone.stop()
+            self.microphone = None
+        if self.remote_track:
+            print("Остановка удаленного трека")
+            self.remote_track.stop()
+            self.remote_track = None
+        if self.pc:
+            print("Закрытие RTCPeerConnection")
+            try:
+                await self.pc.close()
+            except Exception as e:
+                print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
+            self.pc = None
+        self.audio_manager.stop_output_stream()
+        print("Соединение закрыто")
 
     async def close_this(self):
         print("Вызов CallSession.close")

@@ -135,36 +135,37 @@ class CallWidget(QWidget):
         self.send_via_ws(data)
 
     async def offer_to_call(self):
-
-        self.call_session = CallSession(self.send_ice_callback, self.audio)
-
-        # подписываемся на событие ICE кандидатов
-
-        async def on_icecandidate(event):
-            if event.candidate:
-                data = {
-                    "type": "ice_candidate",
-                    "to": self.receiver_id,
-                    "candidate": {
-                        "candidate": event.candidate.candidate,
-                        "sdpMid": event.candidate.sdpMid,
-                        "sdpMLineIndex": event.candidate.sdpMLineIndex
-                    }
+        try:
+            print(f"📞 Начало offer_to_call, call_session={self.call_session}, receiver={self.receiver_name}")
+            self.call_session = CallSession(self.send_ice_callback, self.audio)
+            desc = await self.call_session.create_offer()
+            print(f"📤 Оффер готов: type={desc.type}, sdp={desc.sdp[:100]}...")
+            data = {
+                "type": "offer",
+                "to": self.receiver_id,
+                "offer": {
+                    "type": desc.type,
+                    "sdp": desc.sdp
                 }
-                self.send_via_ws(data)
-
-
-        desc = await self.call_session.create_offer()
-        data = {
-            "type": "offer",
-            "to": self.receiver_id,
-            "offer": {
-                "type": desc.type,
-                "sdp": desc.sdp
             }
-        }
-        self.send_via_ws(data)
-        self.call_session.call_active = True
+            self.send_via_ws(data)
+            self.call_session.call_active = True
+            print("📤 Оффер отправлен")
+        except Exception as e:
+            print(f"❌ Ошибка в offer_to_call: {type(e).__name__}: {e}")
+            raise
+
+    def end_call(self):
+        print(f"🛑 Звонок с {self.receiver_name} завершён, call_active={self.call_active}")
+        self.audio.stop_ringtone()
+        self.audio.play_notification("sounds/end_calling.mp3")
+        self.set_calling_status(False)
+        if self.call_session:
+            print(f"🛑 Закрытие call_session, call_session.call_active={self.call_session.call_active}")
+            asyncio.create_task(self.call_session.close())
+        else:
+            print("⚠️ call_session не инициализирован, пропуск close()")
+
 
     async def on_ice_candidate_received(self, candidate):
         if self.call_session and self.call_session.pc:
@@ -197,13 +198,6 @@ class CallWidget(QWidget):
         asyncio.create_task(self.offer_to_call())
         self.audio.play_ringtone("sounds/zetcord.mp3")
         self.set_calling_status(True)
-
-    def end_call(self):
-        print(f"Звонок с {self.receiver_name} завершён")
-        self.audio.stop_ringtone()
-        self.audio.play_notification("sounds/end_calling.mp3")
-        self.set_calling_status(False)
-        asyncio.create_task(self.call_session.close())
 
     def init_call(self, info):
         print("звонок начался: ", info)
