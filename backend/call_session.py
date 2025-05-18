@@ -18,7 +18,6 @@ class CallSession:
         self.remote_track = None
         self.receiver = None
         self.call_active = False
-        self.loop = None
         self._initialize()
 
     def _initialize(self):
@@ -84,42 +83,74 @@ class CallSession:
 
     async def _start_receiver(self):
         if self.receiver:
-            # Переносим вызов в главный поток
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.audio_manager.start_output_stream)
-            await self.receiver.receive_audio()
+            try:
+                # Получаем event loop явно
+                loop = asyncio.get_event_loop()
+
+                # Запускаем в отдельном потоке с помощью run_in_executor
+                await loop.run_in_executor(
+                    None,  # Используем стандартный executor
+                    lambda: self.audio_manager.start_output_stream()
+                )
+                await self.receiver.receive_audio()
+            except Exception as e:
+                logging.error(f"Ошибка в _start_receiver: {e}")
+                raise
 
     async def cleanup(self):
-        # Убеждаемся, что остановка происходит в главном потоке
-        if self.receiver:
-            await loop.run_in_executor(None, self.audio_manager.stop_output_stream)
         logging.info(
             f"🧹 cleanup() вызван, call_active={self.call_active}, состояние={self.pc.connectionState if self.pc else 'нет соединения'}")
-        if self.microphone:
-            logging.info("Остановка микрофона")
-            self.microphone.stop()
-            self.microphone = None
-        if self.remote_track:
-            logging.info("Остановка удаленного трека")
-            try:
-                self.remote_track.stop()
-            except Exception as e:
-                logging.error(f"Ошибка при остановке remote_track: {type(e).__name__}: {e}")
-            self.remote_track = None
-        if self.receiver:
-            logging.info("Остановка AudioReceiverTrack")
-            await self.receiver.stop()
-            self.receiver = None
-        if self.pc:
-            logging.info("Закрытие RTCPeerConnection")
-            try:
-                await self.pc.close()
-            except Exception as e:
-                logging.error(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
-            self.pc = None
-        self.audio_manager.stop_output_stream()
-        self.audio_manager.stop_microphone_stream()
-        logging.info("Соединение закрыто")
+
+        try:
+            # Получаем event loop
+            loop = asyncio.get_event_loop()
+
+            if self.receiver:
+                # Останавливаем output stream через run_in_executor
+                await loop.run_in_executor(
+                    None,
+                    lambda: self.audio_manager.stop_output_stream()
+                )
+
+            if self.microphone:
+                logging.info("Остановка микрофона")
+                self.microphone.stop()
+                self.microphone = None
+
+            if self.remote_track:
+                logging.info("Остановка удаленного трека")
+                try:
+                    self.remote_track.stop()
+                except Exception as e:
+                    logging.error(f"Ошибка при остановке remote_track: {type(e).__name__}: {e}")
+                self.remote_track = None
+
+            if self.receiver:
+                logging.info("Остановка AudioReceiverTrack")
+                await self.receiver.stop()
+                self.receiver = None
+
+            if self.pc:
+                logging.info("Закрытие RTCPeerConnection")
+                try:
+                    await self.pc.close()
+                except Exception as e:
+                    logging.error(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
+                self.pc = None
+
+            # Останавливаем остальные компоненты audio_manager
+            await loop.run_in_executor(
+                None,
+                lambda: (
+                    self.audio_manager.stop_output_stream(),
+                    self.audio_manager.stop_microphone_stream()
+                )
+            )
+
+            logging.info("Соединение закрыто")
+        except Exception as e:
+            logging.error(f"Ошибка в cleanup: {e}")
+            raise
 
     async def close_this(self):
         logging.info("Вызов CallSession.close")

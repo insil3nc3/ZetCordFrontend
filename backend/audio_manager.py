@@ -23,7 +23,12 @@ class AudioManager(QObject):
 
     def __init__(self, sample_rate=44100, channels=2, parent=None):
         super().__init__(parent)
-        self.moveToThread(QCoreApplication.instance().thread())  # Важно!
+
+        # Проверяем, что QApplication существует
+        if not QCoreApplication.instance():
+            raise RuntimeError("QApplication must be created before AudioManager")
+
+        self.moveToThread(QCoreApplication.instance().thread())
 
         self.sample_rate = sample_rate
         self.output_channels = channels
@@ -31,8 +36,14 @@ class AudioManager(QObject):
         self.audio_output = None
         self.audio_buffer = None
 
-        # Инициализация медиа-плееров в главном потоке
-        QMetaObject.invokeMethod(self, "_init_media_players", Qt.ConnectionType.BlockingQueuedConnection)
+        # Инициализация медиа-плееров (перенесено из отдельного метода)
+        self.ringtone_player = QMediaPlayer()
+        self.ringtone_output = QAudioOutput()
+        self.ringtone_player.setAudioOutput(self.ringtone_output)
+
+        self.notification_player = QMediaPlayer()
+        self.notification_output = QAudioOutput()
+        self.notification_player.setAudioOutput(self.notification_output)
 
         self._output_stopped_intentionally = False
         self._pending_audio_chunks = []
@@ -41,16 +52,6 @@ class AudioManager(QObject):
         self.play_ringtone_signal.connect(self._play_ringtone)
         self.play_notification_signal.connect(self._play_notification)
         self.play_audio_chunk_signal.connect(self._play_audio_chunk_handler)
-
-    def _init_media_players(self):
-        """Инициализация медиа-плееров (должна быть в главном потоке)"""
-        self.ringtone_player = QMediaPlayer()
-        self.ringtone_output = QAudioOutput()
-        self.ringtone_player.setAudioOutput(self.ringtone_output)
-
-        self.notification_player = QMediaPlayer()
-        self.notification_output = QAudioOutput()
-        self.notification_player.setAudioOutput(self.notification_output)
 
     # Все методы ниже автоматически будут вызываться в главном потоке
 
