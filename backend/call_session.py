@@ -3,7 +3,10 @@ import numpy as np
 import sounddevice as sd
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
 from aiortc.contrib.media import MediaStreamError
+
+from backend.audio_manager import AudioReceiverTrack
 from backend.microphone_stream import MicrophoneStreamTrack
+from qasync import asyncSlot
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -11,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class CallSession:
     def __init__(self, send_ice_callback, audio_manager, audio_device=None):
         self.pc = None
+        self.receiver = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
         self.audio_device = audio_device
@@ -33,8 +37,9 @@ class CallSession:
                 selected_device = next((i for i, d in enumerate(devices) if d['max_input_channels'] >= 1), None)
                 if selected_device is None:
                     raise ValueError("Не найдено устройство с поддержкой входного звука")
-
             self.audio_device = selected_device
+            if self.audio_device < 0 or self.audio_device >= len(devices):
+                self.audio_device = sd.default.device[1]  # Use default output device
             device_info = sd.query_devices(self.audio_device)
             logging.info(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
             channels = min(2, device_info['max_input_channels'])
@@ -76,8 +81,10 @@ class CallSession:
         if track.kind == "audio":
             self.remote_track = track
             self.call_active = True
-            asyncio.create_task(self._receive_audio(track))
+            self.receiver = AudioReceiverTrack(track, self.audio_manager)
+            asyncio.create_task(self.receiver.receive_audio())
 
+    @asyncSlot()
     async def _receive_audio(self, track):
         try:
             self.audio_manager.start_output_stream()
@@ -136,6 +143,9 @@ class CallSession:
             logging.info("Остановка микрофона")
             self.microphone.stop()
             self.microphone = None
+        if self.receiver:
+            await self.receiver.stop()
+            self.receiver = None
         if self.remote_track:
             logging.info("Остановка удаленного трека")
             try:
