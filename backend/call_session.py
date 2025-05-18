@@ -9,7 +9,7 @@ class CallSession:
         self.pc = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
-        self.audio_device = 0
+        self.audio_device = audio_device if audio_device is not None else 0
         self.microphone = None
         self.remote_track = None
         self.call_active = False
@@ -42,7 +42,7 @@ class CallSession:
             self.pc.on("signalingstatechange", lambda: print(f"Signaling state: {self.pc.signalingState}"))
             print("CallSession инициализирован")
         except Exception as e:
-            print(f"Ошибка при инициализации CallSession: {e}")
+            print(f"Ошибка при инициализации CallSession: {type(e).__name__}: {e}")
             asyncio.create_task(self.cleanup())
 
     def _handle_track(self, track):
@@ -54,11 +54,9 @@ class CallSession:
 
     async def _receive_audio(self, track):
         try:
-
             self.audio_manager.start_output_stream()
             print("🔁 Начат приём аудиофреймов")
-            # Ожидание соединения с таймаутом
-            timeout = 10  # 10 секунд
+            timeout = 10
             elapsed = 0
             while self.pc.connectionState != "connected" and elapsed < timeout:
                 print(f"⏳ Ожидание соединения... (текущее: {self.pc.connectionState})")
@@ -71,9 +69,9 @@ class CallSession:
                 try:
                     frame = await track.recv()
                     audio_data = frame.to_ndarray(format="flt")
+                    print(f"🎧 Получен фрейм: shape={audio_data.shape}, dtype={audio_data.dtype}, max={np.max(np.abs(audio_data))}")
                     if audio_data.dtype != np.float32:
                         audio_data = audio_data.astype(np.float32)
-                    print(f"🎧 Получен фрейм: shape={audio_data.shape}, max={np.max(np.abs(audio_data))}")
                     if audio_data.ndim == 1:
                         audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
                     elif audio_data.shape[1] == 1:
@@ -85,6 +83,8 @@ class CallSession:
                     self.audio_manager.play_audio_chunk(audio_data)
                 except Exception as e:
                     print(f"❌ Ошибка при приёме аудио: {type(e).__name__}: {e}")
+                    if isinstance(e, (StopAsyncIteration, asyncio.CancelledError)):
+                        break
                     await asyncio.sleep(0.05)
                     continue
         except Exception as e:
@@ -111,7 +111,7 @@ class CallSession:
                 try:
                     await self.pc.close()
                 except Exception as e:
-                    print(f"Ошибка при закрытии RTCPeerConnection: {e}")
+                    print(f"Ошибка при закрытии RTCPeerConnection: {type(e).__name__}: {e}")
                 self.pc = None
             self.audio_manager.stop_output_stream()
             print("Соединение закрыто")
@@ -125,7 +125,7 @@ class CallSession:
         if self.pc:
             state = self.pc.connectionState
             print(f"Состояние соединения: {state}")
-            if state in ["failed", "disconnected", "closed"] and self.call_active:
+            if state in ["failed", "closed"] and self.call_active:
                 self.call_active = False
                 asyncio.create_task(self.cleanup())
 
@@ -140,7 +140,7 @@ class CallSession:
             print("Оффер создан")
             return self.pc.localDescription
         except Exception as e:
-            print(f"Ошибка при создании оффера: {e}")
+            print(f"Ошибка при создании оффера: {type(e).__name__}: {e}")
             raise
 
     async def create_answer(self):
@@ -154,7 +154,7 @@ class CallSession:
             print("Ответ создан")
             return self.pc.localDescription
         except Exception as e:
-            print(f"Ошибка при создании ответа: {e}")
+            print(f"Ошибка при создании ответа: {type(e).__name__}: {e}")
             raise
 
     async def set_remote_description(self, offer):
@@ -163,7 +163,7 @@ class CallSession:
             await self.pc.setRemoteDescription(desc)
             print(f"Установлено удаленное описание типа: {offer['type']}")
         except Exception as e:
-            print(f"Ошибка при установке удаленного описания: {e}")
+            print(f"Ошибка при установке удаленного описания: {type(e).__name__}: {e}")
             raise
 
     async def on_icecandidate(self, event):
@@ -187,4 +187,4 @@ class CallSession:
             await self.pc.addIceCandidate(ice_candidate)
             print("Добавлен ICE-кандидат")
         except Exception as e:
-            print(f"Ошибка при добавлении ICE-кандидата: {e}")
+            print(f"Ошибка при добавлении ICE-кандидата: {type(e).__name__}: {e}")
