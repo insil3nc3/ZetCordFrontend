@@ -23,7 +23,7 @@ from api.profile_actions import edit_nickname, edit_unique_name, get_current_use
 
 
 class RegistrateWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, audio):
         super().__init__()
 
         # ========== init ==========
@@ -32,7 +32,7 @@ class RegistrateWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
         self.view_stack = []  # Хранит историю индексов
-
+        self.audio = audio
         self.profile_create_widget = QWidget()
         self.register_widget = QWidget()
         self.confirm_widget = QWidget()
@@ -130,7 +130,7 @@ class RegistrateWindow(QMainWindow):
 
         # Создаем и показываем MainWindow
         try:
-            self.main_window = MainWindow()
+            self.main_window = MainWindow(self.audio)
             self.main_window.show()
             self.close()  # Закрываем текущее окно только после отображения MainWindow
         except Exception as e:

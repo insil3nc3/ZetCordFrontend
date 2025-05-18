@@ -24,7 +24,7 @@ from screens.utils.screen_style_sheet import screen_style, load_custom_font
 from screens.utils.list_utils import configure_list_widget_no_hscroll
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, audio):
         super().__init__()
         self.user2_id = None
         self.chat_widget = None
@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
         self.call = False
         self.cur_user_avatar_path = None
         self.incoming_call = None
-        self.audio = AudioManager()
+        self.audio = audio
         self.showMaximized()
 
         central_widget = QWidget()

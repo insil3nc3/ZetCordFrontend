@@ -20,7 +20,7 @@ from screens.registrate_screen.registrate_screen import RegistrateWindow
 
 
 class LoginWindow(QMainWindow):
-    def __init__(self, alert=None, user_start_data=None):
+    def __init__(self, alert=None, user_start_data=None, audio=None):
         super().__init__()
         # ========== Init ==========
         self.main_window = None
@@ -30,6 +30,7 @@ class LoginWindow(QMainWindow):
         main_layout = QVBoxLayout()
         central_widget.setLayout(main_layout)
         self.user_start_data = user_start_data
+        self.audio = audio
         # ==========================
 
         # ====== stylization ======
@@ -108,7 +109,7 @@ class LoginWindow(QMainWindow):
         self.alert.setStyleSheet("color: #00FF00;")
         self.alert.setText("Успешно!")
         self.close()
-        self.main_window = MainWindow()
+        self.main_window = MainWindow(self.audio)
         self.main_window.show()
 
     def email_alert(self):
@@ -123,5 +124,5 @@ class LoginWindow(QMainWindow):
 
     def go_to_registration(self):
         self.close()
-        register_window = RegistrateWindow()
+        register_window = RegistrateWindow(self.audio)
         register_window.show()

@@ -1,4 +1,5 @@
-from PyQt6.QtCore import QObject, QEvent, QUrl, QBuffer, QIODevice, QCoreApplication
+from PyQt6.QtCore import QObject, QEvent, QUrl, QBuffer, QIODevice, QCoreApplication, QThread, QMetaObject, Qt, \
+    pyqtSignal
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioSink, QAudioFormat, QAudio, QAudioOutput, QMediaDevices
 import sounddevice as sd
 import numpy as np
@@ -7,32 +8,100 @@ from scipy import signal
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
 class InitializeAudioEvent(QEvent):
     EventType = QEvent.Type(QEvent.registerEventType())
 
     def __init__(self):
         super().__init__(self.EventType)
 
+
 class AudioManager(QObject):
+    play_ringtone_signal = pyqtSignal(str, bool)
+    play_notification_signal = pyqtSignal(str)
+    play_audio_chunk_signal = pyqtSignal(np.ndarray)
+
     def __init__(self, sample_rate=44100, channels=2, parent=None):
         super().__init__(parent)
+        self.moveToThread(QCoreApplication.instance().thread())  # Важно!
+
         self.sample_rate = sample_rate
         self.output_channels = channels
         self.input_stream = None
         self.audio_output = None
         self.audio_buffer = None
+
+        # Инициализация медиа-плееров в главном потоке
+        QMetaObject.invokeMethod(self, "_init_media_players", Qt.ConnectionType.BlockingQueuedConnection)
+
+        self._output_stopped_intentionally = False
+        self._pending_audio_chunks = []
+
+        # Подключаем сигналы
+        self.play_ringtone_signal.connect(self._play_ringtone)
+        self.play_notification_signal.connect(self._play_notification)
+        self.play_audio_chunk_signal.connect(self._play_audio_chunk_handler)
+
+    def _init_media_players(self):
+        """Инициализация медиа-плееров (должна быть в главном потоке)"""
         self.ringtone_player = QMediaPlayer()
         self.ringtone_output = QAudioOutput()
         self.ringtone_player.setAudioOutput(self.ringtone_output)
+
         self.notification_player = QMediaPlayer()
         self.notification_output = QAudioOutput()
         self.notification_player.setAudioOutput(self.notification_output)
-        self._output_stopped_intentionally = False
-        self._pending_audio_chunks = []
+
+    # Все методы ниже автоматически будут вызываться в главном потоке
 
     def customEvent(self, event):
         if event.type() == InitializeAudioEvent.EventType:
             self._initialize_audio_output()
+
+    def _play_ringtone(self, path: str, loop: bool):
+        try:
+            self.ringtone_player.setSource(QUrl.fromLocalFile(path))
+            self.ringtone_output.setVolume(0.8)
+            self.ringtone_player.setLoops(-1 if loop else 1)
+            self.ringtone_player.play()
+        except Exception as e:
+            logging.error(f"Ошибка рингтона: {e}")
+
+    def play_ringtone(self, path: str, loop: bool = True):
+        """Потокобезопасная версия"""
+        self.play_ringtone_signal.emit(path, loop)
+
+    def _play_notification(self, path: str):
+        try:
+            self.notification_player.setSource(QUrl.fromLocalFile(path))
+            self.notification_output.setVolume(0.6)
+            self.notification_player.play()
+        except Exception as e:
+            logging.error(f"Ошибка уведомления: {e}")
+
+    def play_notification(self, path: str):
+        """Потокобезопасная версия"""
+        self.play_notification_signal.emit(path)
+
+    def _play_audio_chunk_handler(self, audio_chunk: np.ndarray):
+        """Обработчик аудио-чанков в главном потоке"""
+        try:
+            if not self.audio_output or self.audio_output.state() not in (
+            QAudio.State.ActiveState, QAudio.State.IdleState):
+                self._pending_audio_chunks.append(audio_chunk)
+                QCoreApplication.postEvent(self, InitializeAudioEvent())
+                return
+
+            # Остальная логика обработки аудио...
+            audio_bytes = audio_chunk.tobytes()
+            self.audio_buffer.write(audio_bytes)
+        except Exception as e:
+            logging.error(f"Ошибка воспроизведения: {e}")
+
+    def play_audio_chunk(self, audio_chunk: np.ndarray):
+        """Потокобезопасная версия"""
+        self.play_audio_chunk_signal.emit(audio_chunk.copy())
+
 
     def _initialize_audio_output(self, audio_format=None):
         """Initialize or reinitialize QAudioSink with a given format."""
@@ -99,46 +168,6 @@ class AudioManager(QObject):
             return
         QCoreApplication.postEvent(self, InitializeAudioEvent())
 
-    def play_audio_chunk(self, audio_chunk: np.ndarray):
-        try:
-            if audio_chunk.size == 0:
-                logging.debug("Пустой аудиофрейм, пропускаем")
-                return
-
-            if not self.audio_output or self.audio_output.state() not in (QAudio.State.ActiveState, QAudio.State.IdleState):
-                logging.warning("⚠ QAudioSink не активен, добавляем в очередь")
-                self._pending_audio_chunks.append(audio_chunk)
-                QCoreApplication.postEvent(self, InitializeAudioEvent())
-                return
-
-            if audio_chunk.dtype != np.float32:
-                audio_chunk = audio_chunk.astype(np.float32)
-            audio_chunk = np.clip(audio_chunk * 10.0, -1.0, 1.0)
-
-            if audio_chunk.ndim == 1:
-                audio_chunk = np.repeat(audio_chunk[:, np.newaxis], self.output_channels, axis=1)
-            elif audio_chunk.shape[1] != self.output_channels:
-                audio_chunk = np.repeat(audio_chunk[:, :1], self.output_channels, axis=1)
-
-            logging.debug(f"Получен аудиофрейм: shape={audio_chunk.shape}, max={np.max(np.abs(audio_chunk))}")
-
-            audio_bytes = audio_chunk.tobytes()
-            if not self.audio_buffer.isOpen():
-                self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
-
-            if self.audio_buffer.pos() > 10 * 1024 * 1024:
-                logging.warning("⚠ Буфер переполнен, сбрасываем")
-                self.audio_buffer.seek(0)
-
-            bytes_written = self.audio_buffer.write(audio_bytes)
-            if bytes_written != len(audio_bytes):
-                logging.warning(f"⚠ Не все аудиоданные записаны: {bytes_written}/{len(audio_bytes)} байт")
-            else:
-                logging.debug(f"Аудио отправлено: {len(audio_bytes)} байт, буфер pos={self.audio_buffer.pos()}")
-        except Exception as e:
-            logging.error(f"❌ Ошибка при воспроизведении аудио: {type(e).__name__}: {e}")
-            if not self._output_stopped_intentionally:
-                self.stop_output_stream()
 
     def stop_output_stream(self):
         if self.audio_output:
@@ -155,15 +184,6 @@ class AudioManager(QObject):
                 self._output_stopped_intentionally = True
                 self._pending_audio_chunks.clear()
 
-    def play_ringtone(self, path: str, loop: bool = True):
-        try:
-            self.ringtone_player.setSource(QUrl.fromLocalFile(path))
-            self.ringtone_output.setVolume(0.8)
-            self.ringtone_player.setLoops(-1 if loop else 1)
-            self.ringtone_player.play()
-            logging.info(f"📞 Воспроизведение рингтона: {path}, состояние: {self.ringtone_player.mediaStatus()}")
-        except Exception as e:
-            logging.error(f"❌ Ошибка при воспроизведении рингтона: {type(e).__name__}: {e}")
 
     def stop_ringtone(self):
         try:
@@ -172,14 +192,6 @@ class AudioManager(QObject):
         except Exception as e:
             logging.error(f"❌ Ошибка при остановке рингтона: {type(e).__name__}: {e}")
 
-    def play_notification(self, path: str):
-        try:
-            self.notification_player.setSource(QUrl.fromLocalFile(path))
-            self.notification_output.setVolume(0.6)
-            self.notification_player.play()
-            logging.info(f"🔔 Воспроизведение уведомления: {path}, состояние: {self.notification_player.mediaStatus()}")
-        except Exception as e:
-            logging.error(f"❌ Ошибка при воспроизведении уведомления: {type(e).__name__}: {e}")
 
     def start_microphone_stream(self, callback):
         try:

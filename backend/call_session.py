@@ -18,6 +18,7 @@ class CallSession:
         self.remote_track = None
         self.receiver = None
         self.call_active = False
+        self.loop = None
         self._initialize()
 
     def _initialize(self):
@@ -83,9 +84,15 @@ class CallSession:
 
     async def _start_receiver(self):
         if self.receiver:
+            # Переносим вызов в главный поток
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.audio_manager.start_output_stream)
             await self.receiver.receive_audio()
 
     async def cleanup(self):
+        # Убеждаемся, что остановка происходит в главном потоке
+        if self.receiver:
+            await loop.run_in_executor(None, self.audio_manager.stop_output_stream)
         logging.info(
             f"🧹 cleanup() вызван, call_active={self.call_active}, состояние={self.pc.connectionState if self.pc else 'нет соединения'}")
         if self.microphone:
