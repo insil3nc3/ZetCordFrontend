@@ -6,6 +6,9 @@ import sounddevice as sd
 from aiortc import MediaStreamTrack
 from av import AudioFrame
 import logging
+import faulthandler
+faulthandler.enable()
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -69,12 +72,19 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
+        print(">> recv() called")
+        logging.debug(f"Filter graph config: {self.resampler.graph if hasattr(self, 'resampler') else 'No resampler'}")
+        logging.debug(">> recv() called")
         try:
             if not self._running or not self.stream.active:
                 raise RuntimeError("Микрофонный поток остановлен или неактивен")
 
             # Получаем данные из буфера
-            data = await self.buffer.get()
+            try:
+                data = await asyncio.wait_for(self.buffer.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                logging.warning("⚠️ recv() timeout: no data in buffer")
+                data = np.zeros((1, self.sample_rate // 100), dtype=np.int16)  # тихий фрейм
 
             # Логирование сырых данных для отладки
             logging.debug(f"Raw audio data type: {type(data)}, shape: {getattr(data, 'shape', 'no shape')}")
@@ -97,6 +107,8 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             # Конвертация в 16-битный формат
             data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
             data = np.ascontiguousarray(data.reshape(1, -1))
+            logging.debug(f"Raw data: dtype={data.dtype}, shape={data.shape}, max={np.max(np.abs(data))}, min={np.min(data)}")
+            logging.debug(f"recv: final data shape={data.shape}, dtype={data.dtype}, first_bytes={data.tobytes()[:32]}")
 
             # Создаем аудиофрейм с явным указанием параметров
             frame = AudioFrame.from_ndarray(
@@ -126,6 +138,10 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
             self._timestamp += silent_data.shape[1]
+            if 'data' in locals():
+                logging.error("Corrupted data (hex): %s", data.tobytes()[:64].hex())
+            logging.error(f"Error in MicrophoneStreamTrack.recv: {e}", exc_info=True)
+
             return frame
 
     def stop(self):

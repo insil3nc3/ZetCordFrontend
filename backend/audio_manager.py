@@ -230,11 +230,7 @@ class AudioManager(QObject):
                 blocksize=1024,
                 callback=callback,
                 device=device,
-                dtype='float32',
-                extra_settings={
-                    'encoding': 'latin1',
-                    'dtype_unicode': 'float32'
-                }
+                dtype='float32'
             )
             self.input_stream.start()
             logging.info(f"🎙️ Микрофонный поток запущен: {device_info['name']} (каналы: {channels})")

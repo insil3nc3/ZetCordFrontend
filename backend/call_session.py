@@ -13,7 +13,7 @@ class CallSession:
         self.pc = None
         self.send_ice_callback = send_ice_callback
         self.audio_manager = audio_manager
-        self.audio_device = audio_device
+        self.audio_device = 12
         self.microphone = None
         self.remote_track = None
         self.receiver = None
