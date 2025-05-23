@@ -1,7 +1,7 @@
 import asyncio
 import numpy as np
 import sounddevice as sd
-from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaStreamError
 from backend.microphone_stream import MicrophoneStreamTrack
 import logging
@@ -21,8 +21,16 @@ class CallSession:
         self._initialize()
 
     def _initialize(self):
+        @self.pc.on("iceconnectionstatechange")
+        async def on_ice_state_change():
+            logging.info(f"ICE состояние: {self.pc.iceConnectionState}")
+            if self.pc.iceConnectionState == "failed":
+                await self.pc.close()
+                logging.warning("❌ ICE соединение не удалось — RTCPeerConnection закрыт")
+
         try:
-            self.pc = RTCPeerConnection()
+            ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+            self.pc = RTCPeerConnection(RTCConfiguration(ice_servers))
             devices = sd.query_devices()
             logging.info("Доступные аудиоустройства:")
             for i, dev in enumerate(devices):
