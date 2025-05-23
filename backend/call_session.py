@@ -21,12 +21,6 @@ class CallSession:
         self._initialize()
 
     def _initialize(self):
-        @self.pc.on("iceconnectionstatechange")
-        async def on_ice_state_change():
-            logging.info(f"ICE состояние: {self.pc.iceConnectionState}")
-            if self.pc.iceConnectionState == "failed":
-                await self.pc.close()
-                logging.warning("❌ ICE соединение не удалось — RTCPeerConnection закрыт")
 
         try:
             ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
@@ -48,7 +42,8 @@ class CallSession:
             logging.info(f"Выбрано устройство ввода: {device_info['name']} (индекс {self.audio_device})")
             channels = min(2, device_info['max_input_channels'])
             try:
-                self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels, sample_rate=44100)
+                sample_rate = int(device_info['default_samplerate'])
+                self.microphone = MicrophoneStreamTrack(device=self.audio_device, channels=channels, sample_rate=sample_rate)
             except Exception as e:
                 raise RuntimeError(f"Не удалось создать MicrophoneStreamTrack: {e}")
 

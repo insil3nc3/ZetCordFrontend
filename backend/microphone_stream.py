@@ -72,77 +72,51 @@ class MicrophoneStreamTrack(MediaStreamTrack):
             self.buffer.put_nowait(indata.copy())
 
     async def recv(self):
-        print(">> recv() called")
-        logging.debug(f"Filter graph config: {self.resampler.graph if hasattr(self, 'resampler') else 'No resampler'}")
-        logging.debug(">> recv() called")
         try:
+            print(">> recv() called")
+
             if not self._running or not self.stream.active:
                 raise RuntimeError("Микрофонный поток остановлен или неактивен")
 
-            # Получаем данные из буфера
+            # Получаем данные
             try:
                 data = await asyncio.wait_for(self.buffer.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 logging.warning("⚠️ recv() timeout: no data in buffer")
-                data = np.zeros((1, self.sample_rate // 100), dtype=np.int16)  # тихий фрейм
+                data = np.zeros((1, self.chunk), dtype=np.int16)
 
-            # Логирование сырых данных для отладки
-            logging.debug(f"Raw audio data type: {type(data)}, shape: {getattr(data, 'shape', 'no shape')}")
+            # Если float32, приводим в диапазон -1..1
+            if data.dtype == np.float32:
+                data = np.clip(data, -1.0, 1.0)
 
-            # Гарантируем, что данные являются numpy массивом
-            if not isinstance(data, np.ndarray):
-                data = np.frombuffer(data.tobytes() if hasattr(data, 'tobytes') else bytes(data),
-                                     dtype=np.float32)
-                data = data.reshape(-1, 1)  # Преобразуем в 2D массив
+            # Моно
+            if data.ndim > 1:
+                data = np.mean(data, axis=1)  # стерео → моно
 
-            # Обработка многоканального аудио
-            if data.ndim > 1 and data.shape[1] == 2:
-                data = np.mean(data, axis=1)  # Микшируем стерео в моно
-            elif data.ndim > 1:
-                data = data[:, 0]  # Берем первый канал
-
-            # Нормализация и усиление
-            data = np.clip(data * 20.0, -1.0, 1.0)
-
-            # Конвертация в 16-битный формат
-            data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
+            # Усиление и перевод в int16
+            data = np.clip(data * 32768.0, -32768, 32767).astype(np.int16)
             data = np.ascontiguousarray(data.reshape(1, -1))
-            logging.debug(f"Raw data: dtype={data.dtype}, shape={data.shape}, max={np.max(np.abs(data))}, min={np.min(data)}")
-            logging.debug(f"recv: final data shape={data.shape}, dtype={data.dtype}, first_bytes={data.tobytes()[:32]}")
 
-            # Создаем аудиофрейм с явным указанием параметров
-            frame = AudioFrame.from_ndarray(
-                data,
-                format='s16',
-                layout='mono'
-            )
-
-            # Устанавливаем метаданные
+            # Создаем безопасный аудиофрейм
+            frame = AudioFrame.from_ndarray(data, format='s16', layout='mono')
             frame.pts = self._timestamp
-            frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
             self._timestamp += frame.samples
+
+            # 🛡️ Обязательно очищаем metadata
+            frame.metadata.clear()
 
             return frame
 
         except Exception as e:
-            logging.error(f"Error in MicrophoneStreamTrack.recv: {e}", exc_info=True)
-            # Возвращаем тихий фрейм при ошибке
-            silent_data = np.zeros((1, self.sample_rate // 100), dtype=np.int16)
-            frame = AudioFrame.from_ndarray(
-                silent_data,
-                format='s16',
-                layout='mono'
-            )
+            logging.error(f"recv() error: {e}", exc_info=True)
+            silent = np.zeros((1, self.chunk), dtype=np.int16)
+            frame = AudioFrame.from_ndarray(silent, format='s16', layout='mono')
             frame.pts = self._timestamp
-            frame.sample_rate = self.sample_rate
             frame.time_base = Fraction(1, self.sample_rate)
-            self._timestamp += silent_data.shape[1]
-            if 'data' in locals():
-                logging.error("Corrupted data (hex): %s", data.tobytes()[:64].hex())
-            logging.error(f"Error in MicrophoneStreamTrack.recv: {e}", exc_info=True)
-
+            self._timestamp += frame.samples
             return frame
+
 
     def stop(self):
         logging.info("🛑 Вызов stop() из: %s", ''.join(traceback.format_stack()[:-1]))
