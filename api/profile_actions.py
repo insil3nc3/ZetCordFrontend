@@ -87,7 +87,11 @@ async def upload_avatar(filepath: str):
 def get_avatar_path(user_profile_id: int):
     cache_dir = "avatar"
     avatar_path = os.path.join(cache_dir ,f"{user_profile_id}.jpg")
-    return avatar_path
+    if os.path.exists(avatar_path):
+        print("ава уже есть вот путь", avatar_path)
+        return avatar_path
+    else:
+        return 1
 
 async def download_avatar(user_profile_id: int) -> str | None:
     headers = {
@@ -95,11 +99,14 @@ async def download_avatar(user_profile_id: int) -> str | None:
     }
 
     avatar_path = get_avatar_path(user_profile_id)
+    if avatar_path != 1:
+        return avatar_path
+    print("иду дальше чем вызов get_avatar_path")
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.get(
-                url=f"{API_URL}/avatar/{user_profile_id}",
+                url=f"{API_URL}/avatar/{str(user_profile_id)}",
                 headers=headers,
                 timeout=1
             )

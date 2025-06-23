@@ -5,7 +5,9 @@ import sounddevice as sd
 import numpy as np
 import logging
 from scipy import signal
+import asyncio
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
@@ -123,10 +125,10 @@ class AudioManager(QObject):
 
             self.stop_output_stream()
 
-            if audio_format is None:
+            if not audio_format:
                 audio_format = QAudioFormat()
-                audio_format.setSampleRate(self.sample_rate)
-                audio_format.setChannelCount(self.output_channels)
+                audio_format.setSampleRate(48000)  # WebRTC стандарт
+                audio_format.setChannelCount(2)
                 audio_format.setSampleFormat(QAudioFormat.SampleFormat.Float)
 
             formats_to_try = [
@@ -250,6 +252,10 @@ class AudioManager(QObject):
             finally:
                 self.input_stream = None
 
+
+
+
+
 class AudioReceiverTrack:
     def __init__(self, track, audio_manager):
         self.track = track
@@ -257,35 +263,78 @@ class AudioReceiverTrack:
         self.running = True
 
     async def receive_audio(self):
+        print("🔁 Начат приём аудиофреймов через AudioReceiverTrack")
+        self.audio_manager.start_output_stream()
+        frame_count = 0
+        while self.running and self.track.readyState == "live":
+            try:
+                frame = await asyncio.wait_for(self.track.recv(), timeout=1.0)
+                frame_count += 1
+                print(f"📻 Получен аудиофрейм #{frame_count}, размер: {len(frame.to_ndarray())}")
+                audio_data = self._process_audio_frame(frame)
+                if audio_data is not None and len(audio_data) > 0:
+                    print(f"🔊 Отправлен аудиофрейм на воспроизведение, размер: {len(audio_data)}")
+                    self.audio_manager.play_audio_chunk(audio_data)
+                else:
+                    print("⚠️ Пустой или некорректный аудиофрейм")
+            except asyncio.TimeoutError:
+                print("⏱️ Таймаут при получении аудиофрейма")
+                continue
+            except Exception as e:
+                print(f"❌ Ошибка при обработке аудиофрейма: {e}")
+                break
+
+    def _process_audio_frame(self, frame):
+        """Обработка аудиофрейма"""
         try:
-            self.audio_manager.start_output_stream()
-            logging.info("🔁 Начат приём аудиофреймов через AudioReceiverTrack")
+            audio_data = frame.to_ndarray()
+            print(
+                f"📥 Получен аудиофрейм: sample_rate={frame.sample_rate}, channels={frame.channels}, dtype={audio_data.dtype}")
+            if audio_data is None or len(audio_data) == 0:
+                print("⚠️ Пустой аудиофрейм")
+                return None
 
-            while self.running and self.track.readyState == "live":
-                frame = await self.track.recv()
-                audio_data = frame.to_ndarray().astype(np.float32) / 32768.0
-                audio_data = np.clip(audio_data * 20.0, -1.0, 1.0)
+            # Нормализуем данные
+            if audio_data.dtype == np.int16:
+                audio_data = audio_data.astype(np.float32) / 32768.0
+            elif audio_data.dtype == np.int32:
+                audio_data = audio_data.astype(np.float32) / 2147483648.0
+            elif audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
 
-                if frame.sample_rate != self.audio_manager.sample_rate:
-                    logging.debug(f"Ресэмплинг: {frame.sample_rate}Hz -> {self.audio_manager.sample_rate}Hz")
-                    num_samples = int(len(audio_data) * self.audio_manager.sample_rate / frame.sample_rate)
+            # Применяем усиление (осторожно!)
+            audio_data = np.clip(audio_data * 2.0, -1.0, 1.0)
+
+            # Ресэмплинг если необходимо
+            if frame.sample_rate != self.audio_manager.sample_rate:
+                logging.debug(f"🔄 Ресэмплинг: {frame.sample_rate}Hz -> {self.audio_manager.sample_rate}Hz")
+                num_samples = int(len(audio_data) * self.audio_manager.sample_rate / frame.sample_rate)
+                if num_samples > 0:
                     audio_data = signal.resample(audio_data, num_samples)
 
-                if audio_data.ndim == 1:
-                    audio_data = np.repeat(audio_data[:, np.newaxis], 2, axis=1)
-                elif audio_data.shape[1] == 1:
-                    audio_data = np.repeat(audio_data, 2, axis=1)
+            # Обеспечиваем правильное количество каналов
+            if audio_data.ndim == 1:
+                # Моно -> Стерео
+                audio_data = np.repeat(audio_data[:, np.newaxis], self.audio_manager.output_channels, axis=1)
+            elif audio_data.shape[1] == 1 and self.audio_manager.output_channels == 2:
+                # Моно -> Стерео
+                audio_data = np.repeat(audio_data, 2, axis=1)
+            elif audio_data.shape[1] > self.audio_manager.output_channels:
+                # Обрезаем лишние каналы
+                audio_data = audio_data[:, :self.audio_manager.output_channels]
 
-                max_amplitude = np.max(np.abs(audio_data))
-                if max_amplitude > 1.0:
-                    audio_data = audio_data / max_amplitude
+            # Финальная нормализация
+            max_amplitude = np.max(np.abs(audio_data))
+            if max_amplitude > 1.0:
+                audio_data = audio_data / max_amplitude
 
-                self.audio_manager.play_audio_chunk(audio_data)
+            return audio_data
 
         except Exception as e:
-            logging.error(f"❌ Ошибка в AudioReceiverTrack: {e}")
-        finally:
-            self.audio_manager.stop_output_stream()
+            logging.error(f"❌ Ошибка при обработке аудиофрейма: {e}")
+            return None
 
     async def stop(self):
+        """Остановка приёма аудио"""
+        logging.info("🛑 Остановка AudioReceiverTrack...")
         self.running = False

@@ -1,5 +1,4 @@
-import backend.custom_opus
-import backend.patch_av_error
+
 import sys
 import asyncio
 from PyQt6.QtWidgets import QApplication

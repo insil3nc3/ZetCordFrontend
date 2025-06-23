@@ -45,6 +45,7 @@ class DialogItem(QWidget):
         # ==============================
 
         # ========== Last message label ==========
+        print("last msg text - ", self.last_msg_text)
         if self.last_msg_text:
             if len(self.last_msg_text) <= 18:
                 msg_text = self.last_msg_text.replace("\n", " ")

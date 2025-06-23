@@ -1,1 +1,1 @@
-default_ava_path = "../avatar/default.png"
+default_ava_path = "avatar/default.png"

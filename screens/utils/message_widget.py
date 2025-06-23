@@ -44,7 +44,7 @@ class MessageWidget(QWidget):
         self.text = QLabel(self.msg_text)
         self.text.setFont(QFont("Inter", 11, QFont.Weight.Normal))
         self.text.setWordWrap(True)
-        self.text.setMaximumWidth(500)
+        self.text.setMaximumWidth(700)
         self.text.setWordWrap(True)
         self.text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.text.setStyleSheet("""

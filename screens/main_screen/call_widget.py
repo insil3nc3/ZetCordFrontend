@@ -8,7 +8,7 @@ from more_itertools.recipes import unique
 
 from backend.avatar_path_getter import find_image_path_by_number
 from backend.call_session import CallSession
-from backend.microphone_stream import MicrophoneStreamTrack
+
 from screens.utils.animate_button import StyledAnimatedButton
 from screens.utils.animate_text_button import AnimatedButton
 from screens.utils.circular_photo import create_circular_pixmap
@@ -17,7 +17,7 @@ from screens.utils.screen_style_sheet import load_custom_font
 from screens.utils.search_screen_profile_widget import SearchScreenProfileWidget
 
 class CallWidget(QWidget):
-    def __init__(self, receiver_id, receiver_name, receiver_avatar_path, cur_user_info, audio, set_calling_status_callback, send_via_ws):
+    def __init__(self, receiver_id, receiver_name, receiver_avatar_path, cur_user_info, audio, set_calling_status_callback, send_via_ws, is_group=False):
         super().__init__()
         self.call_active = False
         self.receiver_id = receiver_id
@@ -30,6 +30,7 @@ class CallWidget(QWidget):
         self.pc = None
         self.audio_track = None
         self.call_session = None
+        self.is_group = is_group
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
         main_layout.setContentsMargins(10, 10, 0, 0)
@@ -101,6 +102,8 @@ class CallWidget(QWidget):
         main_layout.addWidget(top_container)
         main_layout.addWidget(bottom_container)
 
+        self.call_session = None
+
     def fill_data(self):
         self.set_avatar(self.receiver_avatar_path)
         self.nickname.setText(self.receiver_name)
@@ -110,16 +113,26 @@ class CallWidget(QWidget):
         circular_pixmap = create_circular_pixmap(pixmap, 120)
         self.avatar.setPixmap(circular_pixmap)
 
-    def send_ice_callback(self, data: dict):
-        data["to"] = self.receiver_id
+    async def send_ice_callback(self, data: dict):
+        print("был вызван send_ice_callback в call_widget")
+        print(data)
+        # data["to"] = self.receiver_id
         self.send_via_ws(data)
 
     async def offer_to_call(self):
         try:
-            print(f"📞 Начало offer_to_call, call_session={self.call_session}, receiver={self.receiver_name}")
-            self.call_session = CallSession(self.send_ice_callback, self.audio)
+            # Создаем сессию звонка
+            print("создаем экземпляр CallSession в call_widget")
+            self.call_session = CallSession(
+                audio_manager=self.audio,
+                send_ice_callback=self.send_ice_callback,
+                user_id=self.receiver_id
+            )
+
+            print(f"📞 Начало offer_to_call, receiver={self.receiver_name}")
             desc = await self.call_session.create_offer()
             print(f"📤 Оффер готов: type={desc.type}, sdp={desc.sdp[:100]}...")
+
             data = {
                 "type": "offer",
                 "to": self.receiver_id,
@@ -137,16 +150,16 @@ class CallWidget(QWidget):
             raise
 
     def end_call(self):
-        print(f"🛑 Звонок с {self.receiver_name} завершён, call_active={self.call_active}")
+        print(f"🛑 Звонок с {self.receiver_name} завершён")
         self.audio.stop_ringtone()
         self.audio.play_notification("sounds/end_calling.mp3")
         self.set_calling_status(False)
+
         if self.call_session:
-            print(f"🛑 Закрытие call_session, call_session.call_active={self.call_session.call_active}")
-            asyncio.create_task(self.call_session.close_this())
-            self.send_via_ws({"type": "end_call", "to.ConcurrentDictionary`2[System.String,System.String]": self.receiver_id})
-        else:
-            print("⚠️ call_session не инициализирован, пропуск close()")
+            print("🛑 Закрытие call_session")
+            asyncio.create_task(self.call_session.close())
+            self.send_via_ws({"type": "end_call", "to": self.receiver_id})
+
         self.call_session = None
 
     async def on_ice_candidate_received(self, candidate):
@@ -184,9 +197,11 @@ class CallWidget(QWidget):
 
     async def on_answer_received(self, sdp):
         try:
+            self.audio.stop_ringtone()
             print(f"📨 Получен ответ (answer): sdp={sdp}")
             if not self.call_session:
                 raise RuntimeError("CallSession не инициализирован")
+
             await self.call_session.set_remote_description(sdp)
             print("✅ Ответ обработан")
         except Exception as e:

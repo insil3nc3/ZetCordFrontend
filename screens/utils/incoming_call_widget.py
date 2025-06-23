@@ -5,6 +5,7 @@ from PyQt6.QtGui import QFont, QPixmap, QCursor, QIcon, QKeyEvent
 from PyQt6.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
 from backend.avatar_path_getter import find_image_path_by_number
 from backend.call_session import CallSession
+
 from screens.utils.circular_photo import create_circular_pixmap
 from screens.utils.default_avatar import default_ava_path
 from screens.utils.screen_style_sheet import screen_style, load_custom_font
@@ -13,6 +14,7 @@ from screens.utils.screen_style_sheet import screen_style, load_custom_font
 class IncomingCallWidget(QDialog):
     def __init__(self, data, audio, send_via_ws_callback, call_accepted_callback, parent=None):
         super().__init__(parent)
+        print("incomming call screen loaded")
         self.setWindowTitle("Найти пользователя")
         self.setModal(False)
         self.setFixedSize(550, 300)
@@ -100,62 +102,87 @@ class IncomingCallWidget(QDialog):
     def ringtone_off(self):
         self.audio.stop_ringtone()
 
-    def send_ice_callback(self, data: dict):
+    async def send_ice_callback(self, data: dict):
+        """Callback для отправки ICE кандидатов"""
         data["to"] = self.calling_user_data["id"]
+        print(f"🧊 Отправка ICE кандидата: {data}")
         self.send_via_ws(data)
+
+    async def handle_ice_candidate(self, candidate_data):
+        """Обработка входящих ICE кандидатов"""
+        if self.call_session:
+            try:
+                await self.call_session.add_ice_candidate(candidate_data["candidate"])
+                print(f"✅ ICE кандидат обработан: {candidate_data['candidate']['candidate'][:50]}...")
+            except Exception as e:
+                print(f"❌ Ошибка обработки ICE кандидата: {e}")
 
     async def call_accepted(self):
         self.ringtone_off()
         print("Звонок принят")
-        self.call_session = CallSession(self.send_ice_callback, self.audio)
-
-        # Подписка на ICE кандидатов — обязательно, иначе кандидаты не будут отправляться
-
-        async def on_icecandidate(event):
-            if event.candidate:
-                data = {
-                    "type": "ice_candidate",
-                    "to": self.calling_user_data["id"],
-                    "candidate": {
-                        "candidate": event.candidate.candidate,
-                        "sdpMid": event.candidate.sdpMid,
-                        "sdpMLineIndex": event.candidate.sdpMLineIndex
-                    }
-                }
-                self.send_via_ws(data)
 
         offer = self.calling_user_offer.get("offer")
-        print(self.calling_user_data)
+        print(f"Данные звонящего пользователя: {self.calling_user_data}")
+
         if offer:
+            try:
+                # Создаем call_session с правильным callback
+                self.call_session = CallSession(
+                    audio_manager=self.audio,
+                    send_ice_callback=self.send_ice_callback,
+                    user_id=self.calling_user_data["id"]
+                )
 
-            await self.call_session.set_remote_description(offer)
-            answer = await self.call_session.create_answer()
+                print("📥 Устанавливаем удаленное описание...")
+                await self.call_session.set_remote_description(offer)
 
-            data = {
-                "type": "answer",
-                "to": self.calling_user_data["id"],
-                "answer": {
-                    "type": answer.type,
-                    "sdp": answer.sdp
+                print("📨 Создаем ответ...")
+                answer = await self.call_session.create_answer()
+
+                # Отправляем ответ
+                data = {
+                    "type": "answer",
+                    "to": self.calling_user_data["id"],
+                    "answer": {
+                        "type": answer.type,
+                        "sdp": answer.sdp
+                    }
                 }
-            }
-            self.send_via_ws(data)
-            self.call_accepted_callback()
-            print("звонок принят")
-            self.call_session.call_active = True
-            print("Ответ отправлен")
-            self.accept()
-            self.close()
+                print(f"📤 Отправляем ответ: {data['type']}")
+                self.send_via_ws(data)
+
+                # Уведомляем о принятии звонка
+                self.call_accepted_callback()
+                print("✅ Звонок принят, ответ отправлен")
+                self.call_session.call_active = True
+
+                # Ждем небольшую паузу для обработки ICE кандидатов
+                await asyncio.sleep(0.5)
+
+                self.accept()
+                self.close()
+
+            except Exception as e:
+                print(f"❌ Ошибка при принятии звонка: {e}")
+                self.call_rejected()
 
     def call_rejected(self):
         self.ringtone_off()
         self.audio.play_notification("sounds/end_calling.mp3")
-        print("звонок отклонен")
+        print("❌ Звонок отклонен")
+
+        # Отправляем уведомление об отклонении
+        data = {
+            "type": "call_rejected",
+            "to": self.calling_user_data["id"]
+        }
+        self.send_via_ws(data)
+
         self.reject()
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
-            self.call_accepted()
+            asyncio.create_task(self.call_accepted())
         elif event.key() == Qt.Key.Key_Escape:
             self.call_rejected()
         else:

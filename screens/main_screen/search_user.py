@@ -14,11 +14,12 @@ from screens.main_screen.search_screen_switcher import AnimatedSwitcher
 
 
 class UserSearchWidget(QDialog):
-    def __init__(self, open_chat_callback, insert_item_to_list_callback, focus_to_widget_callback, parent=None, cur_user=None):
+    def __init__(self, open_chat_callback, insert_item_to_list_callback, focus_to_widget_callback, parent=None, cur_user=None, get_init_data=None):
         super().__init__(parent)
         self.cur_user = cur_user
         self.pos_btn = {"text": "Открыть чат", "connect": "open_chat"}
         self.un_name = None
+        self.get_init_data = get_init_data
         self.user_widget = None
         self.user_data = None
         self.open_chat = open_chat_callback
@@ -133,7 +134,7 @@ class UserSearchWidget(QDialog):
             data = await create_chat(self.unique_name.text().strip())
             print(data)
             if data["chat_type"] == "new_chat":
-                self.item_widget = self.insert_to_list(self.unique_name.text().strip(), "", self.user_widget.avatar_path, data["_id"], self.id)
+                self.get_init_data()
             self.focus_to_widget(self.id)
             self.open_chat(data["_id"], self.id, self.unique_name.text().strip())
             self.close()

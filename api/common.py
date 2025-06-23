@@ -1,8 +1,8 @@
 import httpx
 
 from .token_manager import TokenManager
-# localhost:8000
-URL = "https://fcd2-185-65-202-122.ngrok-free.app/"
+#
+URL = "http://localhost:8000/"
 timeout = httpx.Timeout(30.0, read=20.0)
 #
 

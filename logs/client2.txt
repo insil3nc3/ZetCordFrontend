@@ -1,0 +1,113 @@
+qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg version n7.1.1 GPL version 3 or later
+2025-06-21 20:04:43,259 - INFO - Медиа-плееры инициализированы
+2025-06-21 20:04:43,259 - INFO - Audio manager initialized
+файл с тоекном есть и в нем есть токен
+2025-06-21 20:04:43,369 - INFO - HTTP Request: GET http://localhost:8000/auth/check_refresh_token "HTTP/1.1 200 OK"
+
+2025-06-21 20:04:43,444 - INFO - Main window shown
+данные отправлены: {'type': 'init'}
+📬 Получено WebSocket-сообщение: {"type":"init","profile_data":{"id":2,"email":"minecrafttvem@gmail.com","nickname":"#ma child","unique_name":"@ma_child"},"chats_data":{"chats":[{"_id":"6824951848869fde680fd0c5","user1_id":1,"user2_id":2,"last_message":{"chat_id":"6824951848869fde680fd0c5","sender_id":1,"receiver_id":2,"content":"f","timestamp":"2025-06-21T15:31:32.734210+00:00","edited":false,"read":false,"_id":"6856d0547c25fe446839dc62"},"chat_type":null},{"_id":"682840a59ef471188e7ce139","user1_id":2,"user2_id":4,"last_message":{"chat_id":"682840a59ef471188e7ce139","sender_id":2,"receiver_id":4,"content":"salem","timestamp":"2025-05-17T07:54:35.793153+00:00","edited":false,"read":false,"_id":"682840bb9ef471188e7ce13a"},"chat_type":null}]}}
+Received message: {'type': 'init', 'profile_data': {'id': 2, 'email': 'minecrafttvem@gmail.com', 'nickname': '#ma child', 'unique_name': '@ma_child'}, 'chats_data': {'chats': [{'_id': '6824951848869fde680fd0c5', 'user1_id': 1, 'user2_id': 2, 'last_message': {'chat_id': '6824951848869fde680fd0c5', 'sender_id': 1, 'receiver_id': 2, 'content': 'f', 'timestamp': '2025-06-21T15:31:32.734210+00:00', 'edited': False, 'read': False, '_id': '6856d0547c25fe446839dc62'}, 'chat_type': None}, {'_id': '682840a59ef471188e7ce139', 'user1_id': 2, 'user2_id': 4, 'last_message': {'chat_id': '682840a59ef471188e7ce139', 'sender_id': 2, 'receiver_id': 4, 'content': 'salem', 'timestamp': '2025-05-17T07:54:35.793153+00:00', 'edited': False, 'read': False, '_id': '682840bb9ef471188e7ce13a'}, 'chat_type': None}]}}
+Тип сообщения: init
+MainWindow: init data get
+2025-06-21 20:04:43,502 - INFO - HTTP Request: GET http://localhost:8000/user/get_user_info?user_id=1 "HTTP/1.1 200 OK"
+скачиваю аватарки...
+2025-06-21 20:04:43,517 - INFO - HTTP Request: GET http://localhost:8000/user/avatar/1 "HTTP/1.1 200 OK"
+2025-06-21 20:04:43,615 - INFO - HTTP Request: GET http://localhost:8000/user/get_user_info?user_id=4 "HTTP/1.1 200 OK"
+скачиваю аватарки...
+2025-06-21 20:04:43,630 - INFO - HTTP Request: GET http://localhost:8000/user/avatar/4 "HTTP/1.1 200 OK"
+2025-06-21 20:04:43,731 - INFO - HTTP Request: GET http://localhost:8000/user/avatar/2 "HTTP/1.1 200 OK"
+📤 Отправка WebSocket-сообщения: {'type': 'chat_history', 'chat_id': '6824951848869fde680fd0c5'}
+данные отправлены: {'type': 'chat_history', 'chat_id': '6824951848869fde680fd0c5'}
+avatar/1.jpg
+Тип сообщения: chat_history
+получено история: chat_history
+📬 Получено WebSocket-сообщение: {"type":"offer","from":{"id":1,"nickname":"zamk!d","unique_name":"@zamkid"},"offer":{"type":"offer","sdp":"v=0\r\no=- 3959518003 3959518003 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic:WMS *\r\nm=audio 9 UDP/TLS/RTP/SAVPF 96 0 8\r\nc=IN IP4 0.0.0.0\r\na=sendrecv\r\na=extmap:1 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=extmap:2 urn:ietf:params:rtp-hdrext:ssrc-audio-level\r\na=mid:0\r\na=msid:208603e9-84a5-481a-8c96-324ab5db7bd6 dcb66d90-b0e7-45e7-8160-518cf2625184\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ssrc:4090409700 cname:d3e79b08-8b44-4d66-a120-490555a481b2\r\na=rtpmap:96 opus/48000/2\r\na=rtpmap:0 PCMU/8000\r\na=rtpmap:8 PCMA/8000\r\na=ice-ufrag:oNtn\r\na=ice-pwd:Y2Ce1fBtQ7Zu7n96HNNsei\r\na=fingerprint:sha-256 C2:D3:3C:3B:A9:0B:9D:AA:F1:FD:CD:E9:B8:4C:97:D4:13:9B:07:E3:DE:C7:0B:2C:C6:5A:BD:01:67:B8:13:D6\r\na=fingerprint:sha-384 18:9D:4D:92:3A:CD:4B:3E:37:2C:9B:49:D2:10:C5:AB:B3:E8:93:A7:31:9A:D6:75:B1:DE:AD:99:D9:6E:62:40:E3:55:06:9D:9A:40:96:87:A4:0A:2F:E4:5B:BE:FF:C0\r\na=fingerprint:sha-512 81:1E:35:B7:AB:39:FA:3F:18:93:5C:2A:E4:E7:62:2A:88:76:A8:B7:62:60:BB:22:C4:3A:A5:03:5D:8E:02:88:B9:8F:9F:35:8F:D6:B1:E6:10:BA:02:F1:C6:21:D1:BF:71:39:4D:AE:13:D5:FC:6F:BD:73:FF:23:5B:A3:B1:1F\r\na=setup:actpass\r\n"}}
+Received message: {'type': 'offer', 'from': {'id': 1, 'nickname': 'zamk!d', 'unique_name': '@zamkid'}, 'offer': {'type': 'offer', 'sdp': 'v=0\r\no=- 3959518003 3959518003 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic:WMS *\r\nm=audio 9 UDP/TLS/RTP/SAVPF 96 0 8\r\nc=IN IP4 0.0.0.0\r\na=sendrecv\r\na=extmap:1 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=extmap:2 urn:ietf:params:rtp-hdrext:ssrc-audio-level\r\na=mid:0\r\na=msid:208603e9-84a5-481a-8c96-324ab5db7bd6 dcb66d90-b0e7-45e7-8160-518cf2625184\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ssrc:4090409700 cname:d3e79b08-8b44-4d66-a120-490555a481b2\r\na=rtpmap:96 opus/48000/2\r\na=rtpmap:0 PCMU/8000\r\na=rtpmap:8 PCMA/8000\r\na=ice-ufrag:oNtn\r\na=ice-pwd:Y2Ce1fBtQ7Zu7n96HNNsei\r\na=fingerprint:sha-256 C2:D3:3C:3B:A9:0B:9D:AA:F1:FD:CD:E9:B8:4C:97:D4:13:9B:07:E3:DE:C7:0B:2C:C6:5A:BD:01:67:B8:13:D6\r\na=fingerprint:sha-384 18:9D:4D:92:3A:CD:4B:3E:37:2C:9B:49:D2:10:C5:AB:B3:E8:93:A7:31:9A:D6:75:B1:DE:AD:99:D9:6E:62:40:E3:55:06:9D:9A:40:96:87:A4:0A:2F:E4:5B:BE:FF:C0\r\na=fingerprint:sha-512 81:1E:35:B7:AB:39:FA:3F:18:93:5C:2A:E4:E7:62:2A:88:76:A8:B7:62:60:BB:22:C4:3A:A5:03:5D:8E:02:88:B9:8F:9F:35:8F:D6:B1:E6:10:BA:02:F1:C6:21:D1:BF:71:39:4D:AE:13:D5:FC:6F:BD:73:FF:23:5B:A3:B1:1F\r\na=setup:actpass\r\n'}}
+Тип сообщения: offer
+📞 Получен оффер от пользователя zamk!d
+incomming call screen loaded
+avatar/1.jpg
+[mp3 @ 0x7f3a14001f80] Estimating duration from bitrate, this may be inaccurate
+Input #0, mp3, from 'sounds/zetcord.mp3':
+  Metadata:
+    encoded_by      : LAME in FL Studio 21
+    date            : 2025
+  Duration: 00:00:17.03, start: 0.000000, bitrate: 192 kb/s
+  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 192 kb/s
+✅ Виджет входящего звонка создан и отображен
+2025-06-21 20:06:50,458 - INFO - 📴 Рингтон остановлен
+Звонок принят
+Данные звонящего пользователя: {'id': 1, 'nickname': 'zamk!d', 'unique_name': '@zamkid'}
+CallSession экземпляр создан
+2025-06-21 20:06:50,461 - INFO - 🎙️ Доступные аудиоустройства:
+2025-06-21 20:06:50,461 - INFO -   0: fifine Microphone: USB Audio (hw:0,0) (входных каналов: 2)
+2025-06-21 20:06:50,461 - INFO -   5: HD-Audio Generic: ALC887-VD Analog (hw:2,0) (входных каналов: 2)
+2025-06-21 20:06:50,461 - INFO -   6: HD-Audio Generic: ALC887-VD Alt Analog (hw:2,2) (входных каналов: 2)
+2025-06-21 20:06:50,461 - INFO -   7: sysdefault (входных каналов: 128)
+2025-06-21 20:06:50,461 - INFO -   11: spdif (входных каналов: 2)
+2025-06-21 20:06:50,461 - INFO -   12: lavrate (входных каналов: 128)
+2025-06-21 20:06:50,461 - INFO -   13: samplerate (входных каналов: 128)
+2025-06-21 20:06:50,461 - INFO -   14: speexrate (входных каналов: 128)
+2025-06-21 20:06:50,461 - INFO -   15: jack (входных каналов: 2)
+2025-06-21 20:06:50,462 - INFO -   16: pipewire (входных каналов: 64)
+2025-06-21 20:06:50,462 - INFO -   17: pulse (входных каналов: 32)
+2025-06-21 20:06:50,462 - INFO -   19: speex (входных каналов: 1)
+2025-06-21 20:06:50,462 - INFO -   20: upmix (входных каналов: 8)
+2025-06-21 20:06:50,462 - INFO -   21: vdownmix (входных каналов: 6)
+2025-06-21 20:06:50,462 - INFO -   23: default (входных каналов: 64)
+2025-06-21 20:06:50,462 - INFO -   24: fifine Microphone Аналоговый стерео (входных каналов: 4)
+2025-06-21 20:06:50,462 - INFO -   25: Family 17h (Models 00h-0fh) HD Audio Controller Аналоговый стерео (входных каналов: 4)
+2025-06-21 20:06:50,462 - INFO -   26: Firefox (входных каналов: 2)
+2025-06-21 20:06:50,462 - INFO -   27: telegram-desktop (входных каналов: 2)
+2025-06-21 20:06:50,462 - INFO -   28: HDA NVidia Цифровой стерео (HDMI) (входных каналов: 2)
+2025-06-21 20:06:50,550 - INFO - 🎙️ Микрофон запущен: default (48000Hz, 1 каналов)
+🎙️ Аудио-трек микрофона добавлен
+📥 Устанавливаем удаленное описание...
+вызвалась функция для установки удаленного описания
+2025-06-21 20:06:50,551 - INFO - 📥 Установка удаленного описания: type=offer
+📥 Установка удаленного описания: type=offer
+📻 Получен трек: audio
+🔊 Аудио-приемник запущен
+2025-06-21 20:06:50,552 - INFO - ✅ Удаленное описание установлено
+✅ Удаленное описание установлено
+запускается обработка отложенных ice кандидатов
+нету отложенных ice кандидатов
+📨 Создаем ответ...
+📨 Создание ответа...
+🔁 Начат приём аудиофреймов через AudioReceiverTrack
+🧊 ICE Gathering State: gathering
+2025-06-21 20:06:50,555 - INFO - Попытка формата: 48000Hz, 2 каналов, SampleFormat.Float
+2025-06-21 20:06:50,559 - INFO - Формат принят: 48000Hz, SampleFormat.Float
+2025-06-21 20:06:50,583 - INFO - 🔊 Аудиовыходной поток запущен: 48000Hz, 2 каналов, SampleFormat.Float
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+🧊 ICE Gathering State: complete
+✅ ICE gathering завершен
+запускается обработка отложенных ice кандидатов
+нету отложенных ice кандидатов
+📨 Ответ создан: type=answer
+🧊 ICE Connection State: checking
+🔌 Состояние соединения: connecting
+📤 Отправляем ответ: answer
+📤 Отправка WebSocket-сообщения: {'type': 'answer', 'to': 1, 'answer': {'type': 'answer', 'sdp': 'v=0\r\no=- 3959518010 3959518010 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic:WMS *\r\nm=audio 9 UDP/TLS/RTP/SAVPF 96 0 8\r\nc=IN IP4 0.0.0.0\r\na=sendrecv\r\na=extmap:1 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=extmap:2 urn:ietf:params:rtp-hdrext:ssrc-audio-level\r\na=mid:0\r\na=msid:16c1ef2a-121c-4daa-824c-14fa226523e4 3208e7a0-8034-475a-ad65-d72755e10ce0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ssrc:1769777383 cname:2eac184b-387a-45f4-93a7-56a8d7136e66\r\na=rtpmap:96 opus/48000/2\r\na=rtpmap:0 PCMU/8000\r\na=rtpmap:8 PCMA/8000\r\na=ice-ufrag:MK8L\r\na=ice-pwd:PggTMn9VEB2ZLHa8kjEa2J\r\na=fingerprint:sha-256 3D:E8:88:A7:80:65:C0:2D:A6:40:C3:CF:51:F6:08:0D:28:C5:60:06:77:EB:9C:88:C5:06:FE:13:46:B5:85:46\r\na=fingerprint:sha-384 FF:1D:F1:E2:6D:C0:AC:43:62:3D:3A:41:32:2F:51:0A:57:34:02:95:E5:61:44:70:ED:71:19:86:A4:77:20:16:F8:72:A7:82:40:C5:24:22:74:9F:80:80:F7:BE:A2:2A\r\na=fingerprint:sha-512 00:49:71:1E:3C:FF:22:E2:C5:D8:77:C2:F5:13:F8:F8:45:F5:C8:80:5D:1A:B8:5C:32:6E:A1:D5:AF:08:BD:A4:13:2C:A2:98:0A:C7:DD:52:D0:C5:96:D0:67:3A:35:DB:81:4D:D4:31:44:CE:6D:EF:19:08:30:A8:50:3C:9C:7B\r\na=setup:active\r\n'}}
+данные отправлены: {'type': 'answer', 'to': 1, 'answer': {'type': 'answer', 'sdp': 'v=0\r\no=- 3959518010 3959518010 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic:WMS *\r\nm=audio 9 UDP/TLS/RTP/SAVPF 96 0 8\r\nc=IN IP4 0.0.0.0\r\na=sendrecv\r\na=extmap:1 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=extmap:2 urn:ietf:params:rtp-hdrext:ssrc-audio-level\r\na=mid:0\r\na=msid:16c1ef2a-121c-4daa-824c-14fa226523e4 3208e7a0-8034-475a-ad65-d72755e10ce0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ssrc:1769777383 cname:2eac184b-387a-45f4-93a7-56a8d7136e66\r\na=rtpmap:96 opus/48000/2\r\na=rtpmap:0 PCMU/8000\r\na=rtpmap:8 PCMA/8000\r\na=ice-ufrag:MK8L\r\na=ice-pwd:PggTMn9VEB2ZLHa8kjEa2J\r\na=fingerprint:sha-256 3D:E8:88:A7:80:65:C0:2D:A6:40:C3:CF:51:F6:08:0D:28:C5:60:06:77:EB:9C:88:C5:06:FE:13:46:B5:85:46\r\na=fingerprint:sha-384 FF:1D:F1:E2:6D:C0:AC:43:62:3D:3A:41:32:2F:51:0A:57:34:02:95:E5:61:44:70:ED:71:19:86:A4:77:20:16:F8:72:A7:82:40:C5:24:22:74:9F:80:80:F7:BE:A2:2A\r\na=fingerprint:sha-512 00:49:71:1E:3C:FF:22:E2:C5:D8:77:C2:F5:13:F8:F8:45:F5:C8:80:5D:1A:B8:5C:32:6E:A1:D5:AF:08:BD:A4:13:2C:A2:98:0A:C7:DD:52:D0:C5:96:D0:67:3A:35:DB:81:4D:D4:31:44:CE:6D:EF:19:08:30:A8:50:3C:9C:7B\r\na=setup:active\r\n'}}
+2025-06-21 20:06:56,169 - INFO - 📴 Рингтон остановлен
+✅ Звонок принят, ответ отправлен
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
+⏱️ Таймаут при получении аудиофрейма
